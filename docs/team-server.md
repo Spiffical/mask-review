@@ -1,7 +1,8 @@
 # Running a review for a team
 
 One machine serves the bundle; reviewers open the page in their browsers. The machine needs Python 3.10 or newer and the
-bundle; nothing else is needed to serve (building the bundle needs numpy and OpenCV, so build it anywhere and copy it).
+bundle; serving needs nothing else. Building a bundle needs numpy and OpenCV, so build it anywhere and copy it; on a
+machine that only serves, `pip install --no-deps` skips them.
 
 ```bash
 pip install git+https://github.com/Spiffical/mask-review
