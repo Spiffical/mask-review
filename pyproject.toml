@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mask-review"
+dynamic = ["version"]
+description = "A web page where an expert checks the masks an annotation pipeline made: sets the score cut, removes, keeps, fixes and adds boxes, and names them with WoRMS taxa."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.21", "opencv-python-headless>=4.5"]
+keywords = ["annotation", "segmentation", "COCO", "review", "marine", "WoRMS", "SAM"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Intended Audience :: Science/Research",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+mask-review = "mask_review.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "mask_review.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["mask_review*"]
+
+[tool.setuptools.package-data]
+mask_review = ["web/*.html", "data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

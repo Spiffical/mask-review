@@ -1,0 +1,318 @@
+{
+ "taxa": [
+  {
+   "id": 1360,
+   "name": "Actiniaria",
+   "rank": "Order",
+   "authority": "Hertwig, 1882",
+   "up": [
+    "Cnidaria",
+    "Hexacorallia"
+   ],
+   "line": [
+    2,
+    1267,
+    1292,
+    1340
+   ],
+   "common": [
+    "sea anemones",
+    "solitary anemones",
+    "true anemones"
+   ],
+   "aka": [],
+   "src": [
+    "class",
+    "list"
+   ]
+  },
+  {
+   "id": 1839,
+   "name": "Ascidiacea",
+   "rank": "Class",
+   "authority": "Blainville, 1824",
+   "up": [
+    "Chordata"
+   ],
+   "line": [
+    2,
+    1821,
+    146420
+   ],
+   "common": [
+    "sea squirts"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 123080,
+   "name": "Asteroidea",
+   "rank": "Class",
+   "authority": "de Blainville, 1830",
+   "up": [
+    "Echinodermata"
+   ],
+   "line": [
+    2,
+    1806,
+    148743
+   ],
+   "common": [
+    "sea stars",
+    "starfish"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 123081,
+   "name": "Crinoidea",
+   "rank": "Class",
+   "authority": "Miller, 1821",
+   "up": [
+    "Echinodermata"
+   ],
+   "line": [
+    2,
+    1806,
+    147423
+   ],
+   "common": [
+    "sea lilies and feather stars"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 164811,
+   "name": "Demospongiae",
+   "rank": "Class",
+   "authority": "Sollas, 1885",
+   "up": [
+    "Porifera"
+   ],
+   "line": [
+    2,
+    558
+   ],
+   "common": [
+    "demosponges",
+    "horny sponges"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 123082,
+   "name": "Echinoidea",
+   "rank": "Class",
+   "authority": "Schumacher, 1817",
+   "up": [
+    "Echinodermata"
+   ],
+   "line": [
+    2,
+    1806,
+    148744
+   ],
+   "common": [
+    "sea urchins",
+    "sea-urchins"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 22612,
+   "name": "Hexactinellida",
+   "rank": "Class",
+   "authority": "Schmidt, 1870",
+   "up": [
+    "Porifera"
+   ],
+   "line": [
+    2,
+    558
+   ],
+   "common": [
+    "glass sponges",
+    "hexactinellid sponges"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 123083,
+   "name": "Holothuroidea",
+   "rank": "Class",
+   "authority": "de Blainville, 1834",
+   "up": [
+    "Echinodermata"
+   ],
+   "line": [
+    2,
+    1806,
+    148744
+   ],
+   "common": [
+    "sea cucumbers"
+   ],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 1341,
+   "name": "Octocorallia",
+   "rank": "Class",
+   "authority": "Haeckel, 1866",
+   "up": [
+    "Cnidaria"
+   ],
+   "line": [
+    2,
+    1267,
+    1292
+   ],
+   "common": [
+    "octocorallians",
+    "octocorals"
+   ],
+   "aka": [],
+   "src": [
+    "class",
+    "list"
+   ]
+  },
+  {
+   "id": 123084,
+   "name": "Ophiuroidea",
+   "rank": "Class",
+   "authority": "Gray, 1840",
+   "up": [
+    "Echinodermata"
+   ],
+   "line": [
+    2,
+    1806,
+    148743
+   ],
+   "common": [
+    "brittle stars",
+    "brittlestars"
+   ],
+   "aka": [],
+   "src": [
+    "class",
+    "list"
+   ]
+  },
+  {
+   "id": 1609360,
+   "name": "Pennatuloidea",
+   "rank": "Superfamily",
+   "authority": "Ehrenberg, 1834",
+   "up": [
+    "Cnidaria",
+    "Octocorallia",
+    "Scleralcyonacea"
+   ],
+   "line": [
+    2,
+    1267,
+    1292,
+    1341,
+    1609355
+   ],
+   "common": [],
+   "aka": [],
+   "src": [
+    "list"
+   ]
+  },
+  {
+   "id": 558,
+   "name": "Porifera",
+   "rank": "Phylum",
+   "authority": "Grant, 1836",
+   "up": [],
+   "line": [
+    2
+   ],
+   "common": [
+    "sponges"
+   ],
+   "aka": [],
+   "src": [
+    "class",
+    "list"
+   ]
+  }
+ ],
+ "above": {
+  "2": [
+   "Animalia",
+   "Kingdom"
+  ],
+  "1806": [
+   "Echinodermata",
+   "Phylum"
+  ],
+  "148743": [
+   "Asterozoa",
+   "Subphylum"
+  ],
+  "1267": [
+   "Cnidaria",
+   "Phylum"
+  ],
+  "1292": [
+   "Anthozoa",
+   "Subphylum"
+  ],
+  "1340": [
+   "Hexacorallia",
+   "Class"
+  ],
+  "148744": [
+   "Echinozoa",
+   "Subphylum"
+  ],
+  "1609355": [
+   "Scleralcyonacea",
+   "Order"
+  ],
+  "147423": [
+   "Crinozoa",
+   "Subphylum"
+  ],
+  "1821": [
+   "Chordata",
+   "Phylum"
+  ],
+  "146420": [
+   "Tunicata",
+   "Subphylum"
+  ]
+ },
+ "classes": {
+  "brittle star": 123084,
+  "sponge": 558,
+  "anemone": 1360,
+  "soft coral": 1341
+ }
+}

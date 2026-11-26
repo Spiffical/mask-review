@@ -1,0 +1,1989 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mask review</title>
+<style>
+/* mask-review. One dark bench: deep-sea frames are dim, so nothing on the page is brighter than the animals. Colour belongs to the taxa.
+   Served by mask_review/server.py, which also holds the kept rule this page mirrors (covered, checked, keptL). */
+:root {
+  color-scheme: dark;
+  --bg: #0c1214; --panel: #141d20; --raise: #1c282c; --line: #2c3b40; --ink: #e8efee; --muted: #9fb2b4;
+  --accent: #6fd6cf; --accent-ink: #04201f; --need: #ffd24a; --bad: #ff8a80; --stage: #050708;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.45 var(--sans); overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+p, h1, h2 { margin: 0; }
+i.sci { font-style: italic; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+kbd { font: 500 0.78rem var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); background: var(--bg); }
+
+#app { height: 100%; display: grid; grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr) 340px; position: relative; }
+header { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 1rem; font-weight: 600; min-width: 0; max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+header .grow { flex: 1 1 auto; }
+header .btn { padding: 5px 9px; }
+.num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.9rem; white-space: nowrap; }
+#bar { width: 64px; height: 6px; border-radius: 3px; background: var(--raise); overflow: hidden; }
+#bar div { height: 100%; background: var(--accent); width: 0; }
+.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 7px; padding: 6px 12px; min-height: 36px; }
+.btn:hover { border-color: var(--accent); }
+.btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn[aria-pressed="true"] kbd { background: transparent; color: var(--accent-ink); border-color: var(--accent-ink); }
+.btn.go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.plain { background: none; border-color: transparent; color: var(--muted); }
+.btn.plain:hover { color: var(--ink); border-color: var(--line); }
+.ck { display: flex; gap: 6px; align-items: center; font-size: 0.9rem; white-space: nowrap; }
+.ck.off { opacity: 0.45; }
+.switch { display: flex; }
+.switch .btn:first-child { border-radius: 7px 0 0 7px; }
+.switch .btn:last-child { border-radius: 0 7px 7px 0; border-left: 0; }
+#app:not([data-mode="frame"]) .frame-only { display: none; }
+#app[data-mode="frame"] .tiles-only { display: none; }
+#people { display: flex; }
+.av { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--panel); margin-left: -6px; padding: 0; font: 600 0.72rem var(--sans); color: #06141a; }
+#export { position: relative; }
+#export summary { list-style: none; cursor: pointer; }
+#export summary::-webkit-details-marker { display: none; }
+#export .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 12; width: 270px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6); display: grid; }
+#export .menu a, #export .menu .mi { color: inherit; text-decoration: none; padding: 8px 10px; border-radius: 6px; border: 0; background: none; text-align: left; font: inherit; }
+#export .menu a:hover, #export .menu .mi:hover { background: var(--raise); }
+#export .menu span { display: block; color: var(--muted); font-size: 0.82rem; }
+#export .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; width: auto; }
+#status { min-width: 7ch; text-align: right; }
+#status.bad { color: var(--bad); }
+
+/* The frame */
+#stage { position: relative; overflow: hidden; background: var(--stage); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+#stage.add { cursor: crosshair; }
+#stage.hot { cursor: pointer; }
+#stage.arm { cursor: crosshair; }
+#stage.drag { cursor: grabbing; }
+#vid { opacity: 0; }
+#vid.on { opacity: 1; }
+#img, #vid { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; }
+#img.lit, #vid.lit { filter: brightness(1.9) contrast(1.08); }
+#over { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#over .m { fill-opacity: 0.22; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+#over .b { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+#over .need { stroke-dasharray: 6 4; }
+#over .hover { fill-opacity: 0.42; stroke-width: 3; }
+#over .sel { fill-opacity: 0.1; }
+#over .seen { fill-opacity: 0.07; stroke-width: 1.25; }
+#over .them { fill: none; stroke-width: 2; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+#over .handle { fill: #fff; stroke: #000; stroke-width: 1; pointer-events: all; }
+#over text { font: 600 13px var(--sans); paint-order: stroke; stroke: rgba(0,0,0,.85); stroke-width: 4px; stroke-linejoin: round; }
+/* Labels that are not kept, when shown: under the cut dashed and grey; removed crossed out in red */
+#over .drop { fill: #c3ccd0; fill-opacity: 0.06; stroke: #c3ccd0; stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+#over .drop.hover, #over .drop.sel { fill-opacity: 0.2; stroke-width: 2.4; }
+#over .rem { stroke: #ff5c5c; stroke-width: 2; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+#over .rem.hover, #over .rem.sel { stroke-width: 3; }
+#over .halo { fill: none; stroke: rgba(0,0,0,.8); stroke-width: 4.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+#over .stamp line { stroke-linecap: round; }
+/* The button on the label under the pointer: ✕ removes it, ✓ keeps one under the cut, ↺ puts a removed one back */
+#over .act { pointer-events: all; cursor: pointer; }
+#over .act circle { fill: rgba(8,12,14,.92); stroke: #fff; stroke-width: 1.5; }
+#over .act path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#over .act.x:hover circle { fill: #c62828; stroke: #ffd7d2; }
+#over .act.keep:hover circle { fill: #2e7d32; stroke: #d8ffd9; }
+#over .act.back:hover circle { fill: #1f6f80; stroke: #fff; }
+/* The cut in the header: a chip when it is fixed, a stepper when reviewers may move it */
+#cutbox { display: flex; align-items: center; gap: 4px; }
+#cutbox .chip { font: 500 0.85rem var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+#cutbox .btn { min-height: 32px; padding: 2px 9px; }
+#cutbox .val { min-width: 4.8em; font: 600 0.9rem var(--mono); padding: 2px 6px; }
+#msg { position: absolute; left: calc(50% - 170px); top: 70px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px 6px 14px; display: flex; gap: 10px; align-items: center; max-width: 92%; z-index: 9; }
+#empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+
+/* Video */
+/* The player lies over the bottom of the stage, in a strip the frame never uses (reserve()), so opening it moves nothing. */
+#view { position: relative; min-height: 0; min-width: 0; grid-row: 2; grid-column: 1; }
+#stage { height: 100%; }
+#player { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; visibility: hidden; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; background: var(--panel); border-top: 1px solid var(--line); }
+#player .btn { padding: 4px 10px; min-height: 36px; white-space: nowrap; }
+#player.on { visibility: visible; }
+#p-play { min-width: 44px; }
+#p-time { font: 500 0.85rem var(--mono); font-variant-numeric: tabular-nums; min-width: 15ch; text-align: center; }
+#track { flex: 1 1 220px; height: 36px; position: relative; cursor: pointer; touch-action: none; border-radius: 6px; }
+#track .rail { position: absolute; left: 0; right: 0; top: 15px; height: 6px; border-radius: 3px; background: var(--line); }
+#track .fill { position: absolute; left: 0; top: 15px; height: 6px; border-radius: 3px; background: var(--accent); }
+#track .mark { position: absolute; top: 5px; width: 3px; height: 26px; margin-left: -1.5px; border-radius: 2px; background: var(--need); }
+#track .knob { position: absolute; top: 10px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px #000; }
+#track .tip { position: absolute; bottom: 36px; transform: translateX(-50%); font: 500 0.78rem var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; pointer-events: none; white-space: nowrap; }
+#p-mark::before { content: ""; display: inline-block; width: 3px; height: 14px; border-radius: 2px; background: var(--need); margin-right: 7px; vertical-align: -2px; }
+
+/* Name box beside the animal */
+#pop { position: absolute; width: 320px; max-height: calc(100% - 16px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.6); z-index: 3; cursor: default; user-select: text; -webkit-user-select: text; }
+#pop.dock { position: static; width: 100%; max-height: none; height: 100%; border: 0; border-radius: 0; box-shadow: none; background: none; display: flex; flex-direction: column; }
+/* Docked, everything down to the note fits the panel: the picture's height follows the panel's (never the animal's text, so it stays
+   put from one animal to the next), the matches take what is left, and only a very short panel scrolls. */
+#pop.dock .in { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+#pop.dock .in > * { flex: none; }
+#pop.dock .in .favs { max-height: clamp(36px, 40cqh - 158px, 280px); overflow-y: auto; }
+#pop.dock #hits { flex: 1 1 110px; min-height: 84px; max-height: none; }
+#pop.dock #close-up { flex: none; }
+#pop .wnav { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+#pop .wnav .btn { padding: 2px 10px; min-height: 34px; }
+#pop .wnav .num { color: var(--ink); min-width: 9ch; text-align: center; }
+#pop .wbar { height: 3px; background: var(--raise); }
+#pop .wbar div { height: 100%; background: var(--accent); }
+#close-up { height: 150px; background-color: var(--stage); background-repeat: no-repeat; border-radius: 10px 10px 0 0; }
+#pop.dock #close-up { height: clamp(56px, 40cqh - 150px, 190px); border-radius: 0; }
+#pop .now { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+#pop .go { min-height: 44px; }
+#pop .end { padding: 22px 16px; display: grid; gap: 12px; }
+.star { border: 0; background: none; padding: 0; width: 34px; height: 30px; font-size: 1.1rem; line-height: 1; color: var(--muted); border-radius: 6px; flex: none; }
+.star:hover { background: var(--raise); color: var(--need); }
+.star[aria-pressed="true"] { color: var(--need); }
+.favs { display: flex; flex-wrap: wrap; gap: 5px; }
+.fav { border: 1px solid var(--line); background: var(--raise); border-radius: 999px; padding: 3px 11px 3px 4px; font-size: 0.88rem; display: inline-flex; gap: 7px; align-items: center; max-width: 100%; text-align: left; }
+.fav:hover { border-color: var(--accent); }
+.fav[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.fav kbd { border-radius: 50%; min-width: 20px; text-align: center; padding: 0 5px; }
+.fav[aria-pressed="true"] kbd { color: var(--accent-ink); border-color: var(--accent-ink); background: transparent; }
+.fav:not(:has(kbd)) { padding-left: 11px; }
+.hint { color: var(--muted); font-size: 0.83rem; }
+#pop .in { padding: 10px 12px 12px; display: grid; gap: 8px; }
+#pop .now { font-size: 1.05rem; line-height: 1.25; }
+#pop .now b { font-weight: 600; }
+#pop .src { color: var(--muted); font-size: 0.85rem; }
+#pop .state { border: 1px dashed var(--line); border-radius: 7px; padding: 6px 8px; font-size: 0.88rem; color: var(--muted); }
+#pop .state .btn { margin-left: 4px; min-height: 30px; padding: 2px 10px; font-size: 0.88rem; }
+#over .act text { font: 700 15px var(--sans); fill: #fff; stroke: none; text-anchor: middle; dominant-baseline: central; }
+#q, #note { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; }
+#q { font-size: 1rem; }
+#hits { display: grid; align-content: start; max-height: 236px; overflow: auto; }
+.hit { display: flex; align-items: center; border-radius: 6px; }
+.hit.on, .hit:hover { background: var(--raise); }
+.hit .pick { flex: 1 1 0; min-width: 0; border: 0; background: none; text-align: left; padding: 5px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; }
+#hits .why { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+#hits .sub { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; }
+#hits .none { color: var(--muted); font-size: 0.85rem; padding: 4px 8px; }
+#pop .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#pop .row .btn { padding: 4px 10px; min-height: 32px; font-size: 0.9rem; }
+.danger { color: var(--bad); }
+
+/* Side */
+aside { border-left: 1px solid var(--line); background: var(--panel); min-height: 0; min-width: 0; grid-row: 2; grid-column: 2; }
+aside .pane { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+#a-dock { grid-template-rows: minmax(0, 1fr); container-type: size; }
+aside .top, aside .foot { padding: 12px 14px; display: grid; gap: 8px; }
+aside .top { border-bottom: 1px solid var(--line); }
+aside .foot { border-top: 1px solid var(--line); }
+.facts { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; min-width: 0; }
+#logs { font-size: 0.85rem; color: var(--muted); max-height: 5.8em; overflow: auto; }
+.scroll { overflow: auto; padding: 6px; min-height: 0; }
+.scroll h2 { font-size: 0.85rem; font-weight: 600; color: var(--muted); padding: 8px 8px 4px; }
+#favs { padding: 2px 8px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+#favs h2 { padding: 6px 0 6px; }
+.gr { display: flex; align-items: center; border-radius: 7px; }
+.gr:hover, .gr.on { background: var(--raise); }
+.gr .all { border: 0; background: none; width: 30px; height: 30px; padding: 0; border-radius: 6px; color: var(--muted); flex: none; }
+.gr .all:hover { color: var(--accent); }
+.gr .all svg { display: block; margin: auto; }
+.g { flex: 1 1 0; min-width: 0; border: 0; background: none; text-align: left; padding: 6px 8px; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 0 10px; align-items: center; }
+#tq { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; }
+#b-walk { text-align: left; }
+.g .sw { width: 14px; height: 14px; border-radius: 4px; }
+.g .sw.need { background: none !important; border: 2px dashed var(--need); }
+.g .c { font-variant-numeric: tabular-nums; color: var(--muted); }
+.g .sub { grid-column: 2 / -1; color: var(--muted); font-size: 0.8rem; }
+#done { width: 100%; min-height: 46px; font-size: 1.02rem; }
+.foot .nav { display: flex; gap: 8px; }
+.foot .nav .btn { flex: 1 1 0; }
+
+/* Frames */
+#film { grid-column: 1 / -1; grid-row: 3; display: flex; gap: 6px; overflow-x: auto; padding: 8px 14px; background: var(--panel); border-top: 1px solid var(--line); }
+#film button { flex: 0 0 auto; width: 112px; height: 63px; padding: 0; border: 2px solid transparent; border-radius: 6px; background: var(--raise); position: relative; overflow: hidden; }
+#film img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.75; }
+#film button.on { border-color: var(--accent); }
+#film button.on img { opacity: 1; }
+#film .t { position: absolute; right: 4px; bottom: 3px; font: 600 0.72rem var(--mono); background: rgba(0,0,0,.72); border-radius: 4px; padding: 1px 5px; }
+#film .new::after { content: "new"; position: absolute; left: 4px; top: 3px; font: 600 0.68rem var(--sans); background: var(--need); color: #1d1600; border-radius: 4px; padding: 0 5px; }
+#film .ok .t { background: var(--accent); color: var(--accent-ink); }
+#film .part .t { background: var(--need); color: #1d1600; }
+#film .w { position: absolute; left: 4px; bottom: 3px; display: flex; gap: 2px; }
+#film .w i { width: 18px; height: 18px; border-radius: 50%; font: 600 0.6rem/18px var(--sans); text-align: center; color: #06141a; }
+
+#app:not([data-mode="frame"]) #msg { top: auto; bottom: 22px; }
+
+/* Tiles: lie over the frame view, which keeps its size underneath, so going back and forth moves nothing */
+#tiles { grid-column: 1; grid-row: 2 / 4; z-index: 6; background: var(--bg); display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); min-width: 0; min-height: 0; position: relative; }
+#app:not([data-mode="frame"]) aside { grid-row: 2 / 4; grid-column: 2; z-index: 6; }
+.thead { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+.thead .row1 { flex: 1 0 100%; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.thead .tt { flex: 1 1 0; min-width: 0; }
+.thead .tt .num { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#t-update { flex: none; } #t-update.none { visibility: hidden; }
+.thead .tn { font-size: 1.1rem; font-weight: 600; line-height: 1.25; }
+.thead select, .thead input[type="range"] { accent-color: var(--accent); }
+.thead select { background: var(--raise); border: 1px solid var(--line); border-radius: 7px; color: inherit; font: inherit; padding: 6px 8px; min-height: 36px; max-width: 10em; }
+#t-size { width: 96px; }
+#grid { overflow: auto; padding: 0 14px 40px; }
+#grid .none { color: var(--muted); padding: 42px 4px 0; margin: 0; }
+.tg { padding: 12px 0 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--tile, 168px), 100%), 1fr)); gap: 8px; grid-auto-rows: max-content; align-content: start; }
+.tg[data-head] { padding-top: 4px; }
+.tg[data-head] .tile { scroll-margin-top: 44px; }
+.th { position: sticky; top: 0; z-index: 2; margin: 0 -14px; padding: 8px 14px 6px; background: var(--bg); font-size: 0.95rem; font-weight: 600; line-height: 1.3; }
+.th .num, .th .path { font-weight: 400; color: var(--muted); font-size: 0.85rem; white-space: normal; }
+.tile { position: relative; border-radius: 8px; background: var(--stage); border: 2px solid transparent; cursor: pointer; overflow: hidden; }
+.tile:hover { border-color: var(--line); }
+.tile.last { border-color: var(--need); }
+.tile.sel { border-color: var(--accent); }
+.tile .pic { aspect-ratio: 1; position: relative; }
+.tile .pic img, .tile .pic svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tile .pic svg path, .tile .pic svg rect { fill: none; stroke: var(--accent); stroke-width: 1.4; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.tile .pic svg .under { stroke: rgba(0,0,0,.45); stroke-width: 3.2; }
+#grid.lit .pic { filter: brightness(1.9) contrast(1.08); }
+#grid.bare .pic svg path, #grid.bare .pic svg rect, #grid.bare .pic svg .under { stroke: none; }
+.tile .sq { position: absolute; left: 6px; top: 6px; width: 26px; height: 26px; border-radius: 6px; border: 2px solid #fff; background: rgba(5,9,11,.6); color: transparent; padding: 0; font: 700 0.95rem var(--sans); opacity: 0; }
+.tile:hover .sq, .tile:focus-within .sq, .tile.sel .sq, #grid.picking .sq { opacity: 1; }
+.tile.sel .sq { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tile .st { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; }
+.tile .st span { font: 600 0.72rem var(--sans); border-radius: 4px; padding: 1px 6px; background: rgba(5,9,11,.75); }
+.tile .st .ok { background: var(--accent); color: var(--accent-ink); }
+.tile .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 8px 4px; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(9,14,16,.82); }
+.tile .cap:empty { display: none; }
+.tile.out .pic { opacity: 0.28; }
+.tile.out .cap, .tile.moved .cap { color: var(--need); }
+/* Tiles of the cut view: the score, a button for the label, and how it stands */
+.tile .sc { position: absolute; left: 6px; top: 6px; font: 600 0.78rem var(--mono); padding: 1px 6px; border-radius: 4px; background: rgba(5,9,11,.84); }
+.tile .ga { position: absolute; right: 6px; top: 6px; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(8,12,14,.9); color: #fff; padding: 0; font: 700 0.95rem/1 var(--sans); opacity: 0; }
+.tile:hover .ga, .tile:focus-within .ga { opacity: 1; }
+.tile .ga.x:hover { background: #c62828; } .tile .ga.keep:hover { background: #2e7d32; } .tile .ga.back:hover { background: #1f6f80; }
+.tile.drop .pic { opacity: 0.5; }
+.tile.drop .pic svg path, .tile.drop .pic svg rect { stroke: #c3ccd0; stroke-dasharray: 4 3; }
+.tile.rem .pic { filter: grayscale(.7) brightness(.6); }
+.tile.rem .pic svg path, .tile.rem .pic svg rect { stroke: #ff6b6b; }
+.tile.rem::after { content: "✕"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 42px; color: rgba(255,120,120,.95); text-shadow: 0 1px 4px #000; pointer-events: none; }
+.tile.hand .sc { background: #7ee787; color: #06200a; }
+
+/* The cut view: lies over the frame like the tiles, so going back and forth moves nothing */
+#cutview { grid-column: 1; grid-row: 2 / 4; z-index: 6; background: var(--bg); display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; position: relative; }
+#cutview .chead { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); position: relative; }
+#hist { display: block; width: 100%; height: 150px; touch-action: none; cursor: ew-resize; overflow: visible; user-select: none; -webkit-user-select: none; }
+#hist .b-k { fill: var(--accent); } #hist .b-d { fill: #66767d; } #hist .b-ok { fill: #7ee787; } #hist .b-x { fill: #d9534f; }
+#hist .axis { stroke: var(--line); stroke-width: 1; } #hist .tick { fill: var(--muted); font: 10px var(--mono); }
+#hist .cutline { stroke: var(--ink); stroke-width: 1.5; } #hist .hand { fill: var(--ink); }
+#hist .side { font: 600 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+#hist .side-k { fill: var(--accent); } #hist .side-d { fill: var(--muted); }
+.htip { position: absolute; top: 4px; padding: 2px 7px; font: 0.8rem var(--mono); background: rgba(8,12,14,.94); border: 1px solid var(--line); border-radius: 5px; pointer-events: none; white-space: nowrap; transform: translateX(-50%); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+#gal { overflow: auto; padding: 10px 16px 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 24px; align-content: start; }
+#gal h3 { font-size: 0.95rem; font-weight: 600; margin: 4px 0 2px; }
+#gal h3 span { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+#gal .tg { padding: 6px 0 0; }
+#gal .none { color: var(--muted); font-size: 0.9rem; padding: 6px 0; margin: 0; }
+#gal .more { grid-column: 1 / -1; justify-self: start; margin-top: 8px; }
+.cutcap { font: 600 0.72rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.cutnum { display: flex; align-items: center; gap: 12px; }
+.cutnum output { font: 500 44px/1 var(--mono); min-width: 2.2ch; text-align: right; font-variant-numeric: tabular-nums; }
+#cut-range { width: 100%; accent-color: var(--accent); margin: 0; height: 22px; }
+.cutbtns { display: flex; flex-wrap: wrap; gap: 6px; } .cutbtns .btn { min-height: 32px; padding: 3px 10px; font-size: 0.88rem; }
+#readout { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 4px 8px 10px; font-size: 0.9rem; }
+#readout dt { color: var(--muted); } #readout dd { margin: 0; font-variant-numeric: tabular-nums; } #readout dd.x { color: var(--bad); }
+#bynames { border-collapse: collapse; width: calc(100% - 16px); margin: 0 8px; font-size: 0.86rem; }
+#bynames th, #bynames td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--line); }
+#bynames th { color: var(--muted); font-weight: 500; } #bynames td.n, #bynames th.n { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Start */
+#start { position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; overflow: auto; z-index: 20; padding: 24px 16px; }
+#start form { width: min(560px, 100%); display: grid; gap: 18px; }
+#start h1 { font-size: 1.7rem; font-weight: 600; line-height: 1.2; }
+#start ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; max-width: 60ch; }
+#start .who { display: grid; gap: 6px; }
+#start input { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; font-size: 1.05rem; width: 100%; }
+#start .btn { justify-self: start; padding: 10px 20px; }
+#start .acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+#start .err { color: var(--bad); }
+#start ul { margin: 0; padding-left: 1.2em; display: grid; gap: 7px; max-width: 62ch; }
+
+@media (hover: none) { kbd { display: none; } .tile .sq { opacity: 1; } }
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  #app { height: auto; min-height: 100%; grid-template: auto auto auto auto / minmax(0, 1fr); }
+  #stage { height: 62vw; }
+  #player { position: static; visibility: visible; }
+  #player:not(.on) { display: none; }
+  aside { border-left: 0; border-top: 1px solid var(--line); grid-row: 3; grid-column: 1; }
+  #film { grid-row: 4; }
+  #msg { left: 50%; }
+  aside .pane { height: auto; }
+  #a-frame .scroll { max-height: 45vh; }
+  #a-dock { grid-template-rows: auto; container-type: normal; }
+  #pop.dock { height: auto; }
+  #pop.dock #close-up { height: 190px; }
+  #pop.dock #hits { min-height: 110px; }
+  #pop.dock .in .favs { max-height: none; }
+  #app:not([data-mode="frame"]) { display: flex; flex-direction: column; }
+  #app:not([data-mode="frame"]) #view, #app:not([data-mode="frame"]) #film { display: none; }
+  #app:not([data-mode="frame"]) aside { order: 1; border-bottom: 1px solid var(--line); }
+  #app[data-mode="tiles"] #tiles, #app[data-mode="cut"] #cutview { order: 2; flex: 1 0 auto; }
+  #gal { grid-template-columns: minmax(0, 1fr); }
+  #tlist { max-height: 26vh; }
+  .tile .sq { opacity: 1; }
+  .thead .tt .num { white-space: normal; }
+  #pop { width: min(320px, calc(100% - 16px)); }
+  #bar { width: 90px; }
+}
+</style>
+</head>
+<body>
+<div id="app" data-mode="frame">
+  <header>
+    <h1 id="title">Mask review</h1>
+    <div class="switch" role="group" aria-label="What to look at">
+      <button class="btn" id="b-frames" aria-pressed="true" title="One frame at a time">Frames</button>
+      <button class="btn" id="b-tiles" aria-pressed="false" title="Every animal of one name, from every frame">Tiles <kbd>T</kbd></button>
+      <button class="btn" id="b-cut" aria-pressed="false" title="Choose the cut: the scores of all labels, and the labels nearest the cut" hidden>Cut <kbd>C</kbd></button>
+    </div>
+    <div id="bar" aria-hidden="true"><div></div></div>
+    <span class="num" id="progress"></span>
+    <div id="cutbox" hidden></div>
+    <span class="grow"></span>
+    <button class="btn" id="b-hide" aria-pressed="false" title="Hide or show the outlines (H)">Hide <kbd>H</kbd></button>
+    <button class="btn" id="b-names" aria-pressed="false" title="Write the name beside every animal">Names <kbd>N</kbd></button>
+    <button class="btn" id="b-lit" aria-pressed="false" title="Brighten the picture">Brighten <kbd>L</kbd></button>
+    <button class="btn frame-only" id="b-vid" aria-pressed="false" title="Play the video around this frame" hidden>Video <kbd>V</kbd></button>
+    <button class="btn" id="b-undo" title="Undo your last change">Undo <kbd>Z</kbd></button>
+    <details id="export"><summary class="btn plain">Export</summary><div class="menu">
+      <a href="/export/labels.coco.json?frames=all" data-export>COCO, all frames<span>The kept labels: exact masks, boxes, names with their AphiaIDs</span></a>
+      <a href="/export/labels.coco.json?frames=checked" data-export>COCO, checked frames<span>Only the frames marked right, for a training set</span></a>
+      <a href="/export/labels.coco.json?frames=all&amp;seg=polygon" data-export>COCO with polygons<span>All frames, outlines as polygons instead of masks</span></a>
+      <a href="/export/labels.csv" data-export>CSV<span>Every label: kept or not, its score, its name, what was changed</span></a>
+      <a href="/export/decisions.json" data-export>Decisions<span>Everything decided here, to keep or to load into another copy</span></a>
+      <hr><button type="button" class="mi" id="x-load">Load decisions…<span>Lay a saved decisions file over this review</span></button></div></details>
+    <input type="file" id="x-file" accept=".json,application/json" hidden>
+    <div id="people" aria-label="Also here"></div>
+    <button class="btn plain" id="b-who" title="Your profile"></button>
+    <span class="num" id="status" role="status"></span>
+  </header>
+
+  <div id="view">
+    <div id="stage" aria-label="Frame">
+      <img id="img" alt="" draggable="false">
+      <video id="vid" muted playsinline preload="auto" hidden></video>
+      <svg id="over" aria-hidden="true"></svg>
+      <div id="empty">Loading</div>
+    </div>
+    <div id="player">
+      <button class="btn" id="p-play" aria-label="Play or pause" title="Play or pause (Space)">▶</button>
+      <button class="btn" id="p-back" aria-label="Back one frame" title="Back one frame (,)">‹</button>
+      <button class="btn" id="p-fwd" aria-label="Forward one frame" title="Forward one frame (.)">›</button>
+      <div id="track" role="slider" tabindex="0" aria-label="Position in the video" aria-valuemin="0"><div class="rail"></div><div class="fill"></div><div class="mark" title="The labelled frame"></div><div class="knob"></div><div class="tip" hidden></div></div>
+      <span id="p-time"></span>
+      <button class="btn" id="p-mark" title="Pause at the still the labels belong to (0)">Labelled still</button>
+      <button class="btn" id="p-speed" title="Playback speed">1×</button>
+      <button class="btn" id="p-new" title="Make a new frame to label from what the video shows now">New frame here <kbd>F</kbd></button>
+      <button class="btn" id="p-close" title="Close the video and go back to the labels (V or Esc)">Close</button>
+    </div>
+    <div id="pop" hidden></div>
+  </div>
+
+  <section id="tiles" hidden aria-label="Tiles">
+    <div class="thead">
+      <div class="row1"><div class="tt"><div class="tn" id="t-name"></div><div class="num" id="t-sub"></div></div><button class="btn" id="t-update"></button></div>
+      <label class="ck" id="t-lower-l" title="Also show every species, genus and family that lies under this name in WoRMS"><input type="checkbox" id="t-lower">Include lower taxa</label>
+      <label class="ck"><input type="checkbox" id="t-open">Unchecked only</label>
+      <select id="t-scope" aria-label="Which frames"><option value="all">All frames</option><option value="frame">This frame</option></select>
+      <label class="ck" title="Tile size"><input type="range" id="t-size" min="96" max="340" step="4" aria-label="Tile size"></label>
+      <button class="btn" id="t-all">Select all</button>
+      <button class="btn" id="t-ok" title="Mark every tile shown here as checked">All are right</button>
+    </div>
+    <div id="grid"></div>
+  </section>
+
+  <section id="cutview" hidden aria-label="The cut">
+    <div class="chead">
+      <svg id="hist" viewBox="0 0 600 150" role="img" aria-label="The scores of all labels. Drag to move the cut"></svg>
+      <div class="htip" id="htip" hidden></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>kept by the score</span><span><i style="background:#66767d"></i>under the cut</span><span><i style="background:#7ee787"></i>checked by a reviewer: kept</span><span><i style="background:#d9534f"></i>removed by a reviewer</span></div>
+    </div>
+    <div id="gal"></div>
+  </section>
+
+  <aside>
+    <div class="pane" id="a-frame">
+      <div class="top">
+        <button class="btn" id="b-walk" title="Look at every animal in this frame, one after the other">Go through them <kbd>S</kbd></button>
+        <button class="btn" id="b-add" aria-pressed="false">Add a missing animal <kbd>B</kbd></button>
+        <div class="facts" id="facts"></div>
+        <div id="logs"></div>
+        <button class="btn plain" id="drop" hidden style="justify-self:start">Remove this frame</button>
+      </div>
+      <div class="scroll"><div id="favs"></div><div id="list"></div></div>
+      <div class="foot">
+        <button class="btn go" id="done">Frame is right</button>
+        <div class="nav"><button class="btn" id="prev">Previous <kbd>←</kbd></button><button class="btn" id="next">Next <kbd>→</kbd></button></div>
+      </div>
+    </div>
+    <div class="pane" id="a-tiles" hidden>
+      <div class="top"><input id="tq" placeholder="Find a name, family, order" aria-label="Find a name, a family, an order" autocomplete="off" spellcheck="false"></div>
+      <div class="scroll" id="tlist"></div>
+    </div>
+    <div class="pane" id="a-cut" hidden>
+      <div class="top">
+        <label class="cutcap" for="cut-range">Cut on the <span id="c-name">score</span></label>
+        <div class="cutnum"><output id="c-val" for="cut-range"></output><div style="flex:1;display:grid;gap:8px;min-width:0"><input type="range" id="cut-range" min="0" max="100" step="1" aria-describedby="c-rule">
+          <div class="cutbtns"><button class="btn" id="c-m5">−5</button><button class="btn" id="c-m1">−1 <kbd>J</kbd></button><button class="btn" id="c-p1">+1 <kbd>K</kbd></button><button class="btn" id="c-p5">+5</button></div></div></div>
+        <button class="btn plain" id="c-back" style="justify-self:start"></button>
+        <p class="hint" id="c-rule"></p>
+      </div>
+      <div class="scroll"><dl id="readout"></dl><h2>By name, all frames</h2><table id="bynames"></table></div>
+      <div class="foot"><p class="hint">Look at the labels nearest the cut. If those under it are animals, lower it; if those over it are not, raise it. ✓ keeps a label whatever the cut; ✕ removes it. Click a tile to see it in its frame.</p></div>
+    </div>
+    <div class="pane" id="a-dock" hidden></div>
+  </aside>
+
+  <div id="film"></div>
+  <div id="msg" hidden role="status"></div>
+</div>
+
+<div id="start" hidden>
+  <form id="who">
+    <h1 id="start-title">Check the labels</h1>
+    <ul id="start-how">
+      <li><b>Go through a frame:</b> press <kbd>S</kbd>. Each animal comes up in turn; Enter if it is right, a number key or a typed name if not, Delete if it isn’t an animal.</li>
+      <li><b>Remove a wrong label:</b> point at it and click its ✕ (or press <kbd>X</kbd>).</li>
+      <li><b>Go through one kind:</b> press <kbd>T</kbd> for tiles of every animal with the same name. Click one to see it in its frame; Esc brings you back to the same place.</li>
+      <li id="start-cut" hidden><b>Choose the cut:</b> press <kbd>C</kbd> for the scores of all labels and the ones nearest the cut; <kbd>J</kbd> and <kbd>K</kbd> move it.</li>
+      <li><b>Star the names you use most</b> (☆). They get the number keys 1 to 9.</li>
+      <li><b>Fix a box</b> by dragging its corners. <kbd>B</kbd> adds a missing animal.</li>
+      <li>Everything saves by itself, and others see it at once.</li>
+    </ul>
+    <div class="who"><label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="100" required></div>
+    <div class="who"><label for="email">Your email <span class="hint">(optional)</span></label><input id="email" name="email" type="email" autocomplete="email" maxlength="200"><span class="hint">Kept on this server with your labels, so others can ask you about one; other reviewers see only your name. The same email on another computer brings your stars back.</span></div>
+    <p class="err" id="who-err" role="alert" hidden></p>
+    <div class="acts"><button class="btn go" id="who-go">Start</button><button class="btn plain" type="button" id="who-cancel" hidden>Cancel</button><button class="btn plain" type="button" id="who-other" hidden>I’m someone else</button></div>
+  </form>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id), SVG = 'http://www.w3.org/2000/svg';
+const disk = { get(k) { try { return localStorage.getItem('le.' + k); } catch { return null; } }, set(k, v) { try { v === null ? localStorage.removeItem('le.' + k) : localStorage.setItem('le.' + k, v); } catch {} } };
+const TOUCH = matchMedia('(hover: none)').matches;  // no keyboard: don't bring up the one on the screen by itself
+const PALETTE = ['#5ad1ff', '#7ee787', '#ff8fab', '#c9a6ff', '#ffb37c', '#4fe0c6', '#ffa3f0', '#b7e34f', '#8fb7ff', '#ff7a7a', '#e2c08d', '#9ad0c2'];
+const NEED = '#ffd24a';
+// Everything is in the page: frames by id, in order. `cur` is the frame on the stage; `mode` says whether the tiles lie over it.
+let frames = new Map(), order = [], cur = null, mode = 'frame', title = '', built = 0, page = 0, boot = '', seq = 0;
+// The cut on the agents' score: null when the labels carry no scores. cutMode is 'fixed' (set when the server started) or 'tune'.
+let cut = null, cut0 = null, cutMode = 'fixed', scoreName = 'score', logsName = null, hasVideo = false, showDropped = false, showRemoved = false;
+let me = null, people = [], taxa = [], byId = new Map();
+let sel = new Set(), hover = null, view = { k: 1, x: 0, y: 0 }, fitK = 1, adding = false, armed = null, hidden = false;
+let allNames = disk.get('names') === '1', lit = disk.get('lit') === '1', colours = new Map(), lastTaxon = null, recent = [], drag = null;
+const session = [...crypto.getRandomValues(new Uint8Array(10))].map(b => (b % 36).toString(36)).join('');  // this browser tab
+try { recent = JSON.parse(disk.get('recent') || '[]'); } catch {}
+
+const key = t => t ? (t.id || 't') + '|' + t.name : '';
+// What stays (store.py has the same rule): a removed label never; one a reviewer added or checked always; the others by their score.
+// A label is checked when a reviewer said it is right, or when its frame was marked right while it was shown (at that moment's cut).
+const isNum = v => typeof v === 'number' && isFinite(v);
+const scored = l => isNum(l.s);
+const covered = (f, l) => l.was === null || !scored(l) || !isNum(f.done_cut) || l.s >= f.done_cut;
+const checked = (f, l) => !!l.ok || (!!f.done && covered(f, l));
+const keptL = (f, l) => !l.removed && (l.was === null || checked(f, l) || cut === null || !scored(l) || l.s >= cut);
+const belowCut = (f, l) => !l.removed && !keptL(f, l);
+const removedL = l => !!l.removed && l.was !== null;  // a box drawn by mistake and removed is not shown at all
+const live = f => { f = f || cur; return f ? f.labels.filter(l => keptL(f, l)) : []; };
+// Drawn besides the kept labels when asked: removed ones crossed out, and (when the cut can move) those under it, dashed.
+const extra = f => { f = f || cur; return f ? f.labels.filter(l => (showRemoved && removedL(l)) || (showDropped && cutMode === 'tune' && belowCut(f, l))) : []; };
+const labelOf = (fr, id) => { const f = frames.get(fr), l = f && f.labels.find(x => x.id === id); return l && keptL(f, l) ? l : null; };
+const anyLabel = (fr, id) => { const f = frames.get(fr), l = f && f.labels.find(x => x.id === id); return l && !(l.removed && l.was === null) ? l : null; };
+const fmt = v => Number.isInteger(v) ? String(v) : (+v).toFixed(1);
+const colour = t => {
+  if (!t) return NEED;
+  const k = key(t);
+  if (!colours.has(k)) {
+    let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const used = new Set(colours.values());
+    let c = PALETTE[h % PALETTE.length];
+    for (let j = 0; j < PALETTE.length && used.has(c); j++) c = PALETTE[(h + j) % PALETTE.length];
+    colours.set(k, c);
+  }
+  return colours.get(k);
+};
+const common = t => t && byId.get(t.id) ? byId.get(t.id).common.slice(0, 2).join(', ') : '';
+const italic = t => ['Genus', 'Subgenus', 'Species', 'Subspecies'].includes(t.rank);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const sci = t => t ? (italic(t) ? `<i class="sci">${esc(t.name)}</i>` : esc(t.name)) : 'Needs a name';
+const el = (tag, attrs, parent) => { const e = document.createElementNS(SVG, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.append(e); return e; };
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+async function post(u, body, opt) {
+  const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), ...opt }), d = await r.json();
+  if (!r.ok) throw Object.assign(new Error(d.error || r.status), { status: r.status });
+  return d;
+}
+const get = u => fetch(u).then(r => r.json());
+
+/* ---- what lies under what: each taxon's line is every AphiaID above it, from the kingdom down ---- */
+const above = new Map(), lines = new Map(), byName = new Map();  // taxa only met in lines; lines of names the list does not have; names in lower case
+let unplaced = new Set(), learning = false, learnAt = 0;
+const taxonOf = id => byId.get(id) || above.get(id) || null;
+function known(t) { if (!byId.has(t.id) && !above.has(t.id)) above.set(t.id, t); const n = t.name.toLowerCase(); if (!byName.has(n)) byName.set(n, t); }
+function lineOf(t) {  // null: not known yet. A name kept as typed ("Actiniaria sp4") lies under the taxon it starts with.
+  if (!t) return [];
+  if (t.id) return (byId.get(t.id) || {}).line || (above.get(t.id) || {}).line || lines.get(t.id) || null;
+  const b = byName.get(t.name.toLowerCase().split(/\s+/)[0]);
+  return b && b.id ? [...(lineOf(b) || []), b.id] : [];
+}
+const idIn = k => parseInt(k, 10) || 0;
+const under = (t, k) => { const id = idIn(k); if (!t || !id || key(t) === k) return false; const L = lineOf(t); return !!L && L.includes(id); };
+function setLine(id, rows) {  // rows: [id, name, rank] from the kingdom down to the taxon's parent
+  rows.forEach(([i, name, rank], k) => known({ id: i, name, rank, line: rows.slice(0, k).map(x => x[0]) }));
+  lines.set(id, rows.map(x => x[0]));
+}
+async function learn() {  // names the list does not have: ask WoRMS once, from this browser
+  const want = new Set();
+  for (const f of frames.values()) for (const l of f.labels) if (l.taxon && l.taxon.id && !l.removed && !lineOf(l.taxon)) want.add(l.taxon.id);
+  if (learning || !want.size || Date.now() < learnAt) return;
+  learning = true; unplaced = new Set(); let got = false;
+  const saved = (() => { try { return JSON.parse(disk.get('lines') || '{}'); } catch { return {}; } })();
+  for (const id of want) {
+    let rows = saved[id];
+    if (!rows) try {
+      rows = []; let n = await fetch(`https://www.marinespecies.org/rest/AphiaClassificationByAphiaID/${id}`).then(r => r.status === 200 ? r.json() : Promise.reject(r.status));
+      for (; n; n = n.child) if (n.AphiaID !== 1 && n.AphiaID !== id) rows.push([n.AphiaID, n.scientificname, n.rank || '']);
+      saved[id] = rows; disk.set('lines', JSON.stringify(saved));
+    } catch { unplaced.add(id); continue; }
+    setLine(id, rows); got = true;
+  }
+  learning = false; learnAt = unplaced.size ? Date.now() + 60000 : 0;
+  if (got || unplaced.size) { if (mode === 'tiles') retile(); }
+}
+
+/* ---- labels: what changed, saving, undo ---- */
+const state = l => JSON.stringify([l.box, l.taxon ? { id: l.taxon.id, name: l.taxon.name, rank: l.taxon.rank } : null, l.note || '', !!l.unsure, !!l.removed, !!l.ok]);
+const restore = (l, s) => { [l.box, l.taxon, l.note, l.unsure, l.removed, l.ok] = JSON.parse(s); };
+const pend = new Map();  // frame -> { ids, done }: changed here, not sent yet
+let sending = null, saving = null, saveTimer = 0, failing = false, undo = [];
+function adopt(f) { f.mark = new Map(f.labels.map(l => [l.id, state(l)])); f.markDone = f.done; frames.set(f.id, f); }
+function load(all) {
+  const mine = [];
+  for (const [fr, p] of pend) for (const id of p.ids) { const f = frames.get(fr), l = f && f.labels.find(x => x.id === id); if (l) mine.push([fr, l]); }
+  ({ boot, seq, built, title } = all); page = page || all.page;
+  cutMode = all.mode === 'tune' ? 'tune' : 'fixed'; scoreName = all.score || 'score'; logsName = all.logs || null; hasVideo = !!all.video;
+  cut0 = isNum(all.cut0) ? all.cut0 : null; if (!cutPending) cut = isNum(all.cut) ? all.cut : null;
+  frames = new Map(); order = all.frames.map(f => f.id); all.frames.forEach(adopt);
+  for (const [fr, l] of mine) {  // changes not sent yet stay on top of what the server has
+    const f = frames.get(fr); if (!f) continue;
+    const x = f.labels.find(y => y.id === l.id);
+    if (x) restore(x, state(l)); else f.labels.push(l);
+    f.mark.set(l.id, state(l));
+  }
+  if (cur) cur = frames.get(cur.id) || frames.get(order[0]);
+}
+const pending = f => { if (!pend.has(f.id)) pend.set(f.id, { ids: new Set(), done: false }); return pend.get(f.id); };
+const mineNow = (f, id) => (pend.get(f.id) && pend.get(f.id).ids.has(id)) || (sending && sending.get(f.id) && sending.get(f.id).ids.has(id)) || (drag && drag.l && drag.l.id === id && cur === f);
+// Call after changing labels of these frames: works out what changed, remembers how to undo it, and saves it.
+function commit(fs, undoing) {
+  const entry = [];
+  for (const f of fs) {
+    for (const l of f.labels) {
+      const s = state(l), was = f.mark.get(l.id);
+      if (s === was) continue;
+      entry.push({ f: f.id, id: l.id, before: was === undefined ? null : was, after: s });
+      f.mark.set(l.id, s); pending(f).ids.add(l.id);
+    }
+    if (f.done !== f.markDone) { entry.push({ f: f.id, done: f.markDone }); f.markDone = f.done; if (f.done) { f.by = me ? me.name : ''; f.done_cut = cut; } else f.done_cut = null; pending(f).done = true; }
+  }
+  if (entry.length) {
+    if (!undoing) { undo.push(entry); if (undo.length > 300) undo.shift(); }
+    status('Saving'); clearTimeout(saveTimer); saveTimer = setTimeout(flush, 350);
+  }
+  refresh();
+}
+function refresh() { draw(); side(); film(); progress(); retile(); recut(); }
+async function flush(leaving) {
+  clearTimeout(saveTimer);
+  while (saving && leaving !== true) { await saving; clearTimeout(saveTimer); }
+  if (!pend.size) return;
+  if (!me) return profile();
+  sending = new Map(pend); pend.clear();
+  const changes = [...sent(sending)];
+  saving = post('/api/save', { uid: me.uid, session, changes }, { keepalive: leaving === true })
+    .then(d => {
+      failing = false;
+      for (const k of d.kept) { const l = frames.get(k.frame) && frames.get(k.frame).labels.find(x => x.id === k.id); if (l) { l.rev = k.rev; l.by = me.name; } }
+      sending = null;
+      for (const t of d.theirs) {
+        const f = frames.get(t.frame), p = pend.get(t.frame); if (!f) continue;
+        for (const x of t.labels) if (t.refused.includes(x.id)) { if (p) p.ids.delete(x.id); put(f, x, true); } else put(f, x);
+        const n = t.refused.length, by = [...new Set(t.labels.filter(x => t.refused.includes(x.id)).map(x => x.by))].join(' and ');
+        say(`${esc(by)} changed ${n === 1 ? 'that animal' : n + ' of those animals'} at the same moment. Their version is shown.`);
+      }
+      for (const t of d.bad || []) {
+        const f = frames.get(t.frame), p = pend.get(t.frame); if (!f) continue;
+        for (const x of t.labels) if (t.refused.includes(x.id)) { if (p) p.ids.delete(x.id); put(f, x, true); }
+        for (const id of t.refused) if (!t.labels.some(x => x.id === id)) { const k = f.labels.findIndex(l => l.id === id); if (k >= 0) { f.labels.splice(k, 1); f.mark.delete(id); sel.delete(id); } }
+        say(`The server could not take ${t.refused.length === 1 ? 'a change' : t.refused.length + ' changes'} (${esc(t.errors[0])}), so ${t.refused.length === 1 ? 'that label is' : 'those labels are'} back as before.`);
+      }
+      status('Saved'); if (d.theirs.length || (d.bad && d.bad.length)) refresh();
+    })
+    .catch(async e => {
+      if (e.status === 400) { sending = null; status('Not saved', true); load(await get('/api/all')); open(cur.id, true); say('The server refused that change: ' + esc(e.message)); return; }
+      for (const [fr, p] of sending) { const q = pending({ id: fr }); p.ids.forEach(i => q.ids.add(i)); q.done = q.done || p.done; }
+      if (e.status === 401) { signedOut(); return; }
+      failing = true; status('Not saved, retrying', true);
+    })
+    .finally(() => { saving = null; sending = null; if (pend.size) saveTimer = setTimeout(flush, failing ? 4000 : 350); });
+  await saving;
+}
+function* sent(m) {
+  for (const [fr, p] of m) {
+    const f = frames.get(fr); if (!f) continue;
+    yield { frame: fr, done: p.done ? f.done : null, cut: p.done && f.done && isNum(f.done_cut) ? f.done_cut : null, labels: [...p.ids].map(id => f.labels.find(l => l.id === id)).filter(Boolean).map(l => ({ id: l.id, base: l.rev || 0, box: l.box, taxon: l.taxon, note: l.note || '', unsure: !!l.unsure, removed: !!l.removed, ok: !!l.ok })) };
+  }
+}
+addEventListener('pagehide', () => { flush(true); navigator.sendBeacon('/api/bye', JSON.stringify({ session })); });
+addEventListener('beforeunload', e => { if (pend.size && failing) e.preventDefault(); });
+function doUndo() {
+  const entry = undo.pop();
+  if (!entry) return say('Nothing to undo.');
+  const touched = new Set(); let theirs = 0, back = null;
+  for (const c of entry) {
+    const f = frames.get(c.f); if (!f) continue;
+    touched.add(f); back = back || c;
+    if ('done' in c) { f.done = c.done; continue; }
+    const l = f.labels.find(x => x.id === c.id);
+    if (!l || state(l) !== c.after) { theirs++; continue; }  // someone changed it since
+    if (c.before === null) l.removed = true; else restore(l, c.before);
+  }
+  sel = new Set([...sel].filter(i => cur.labels.some(l => l.id === i && !l.removed)));
+  if (!walk) closePop();
+  commit([...touched], true);
+  if (theirs) say(theirs === entry.length ? 'Someone else has changed it since, so it was left as it is.' : `${plural(theirs, 'animal')} changed by someone else since, left as they are.`);
+  if (mode !== 'frame' || !back) return;
+  const k = walk ? walk.items.findIndex(i => i.f === back.f && i.id === back.id) : -1;
+  if (k >= 0) go(k); else if (!walk && back.f !== cur.id) open(back.f);
+}
+function status(t, bad) { $('status').textContent = t; $('status').classList.toggle('bad', !!bad); }
+let msgTimer = 0;
+function say(html, act, fn, stay) {
+  const m = $('msg'); m.innerHTML = `<span>${html}</span>`;
+  if (act) { const b = document.createElement('button'); b.className = 'btn plain'; b.textContent = act; b.onclick = () => { m.hidden = true; fn(); }; m.append(b); }
+  m.hidden = false; m.dataset.stay = stay ? '1' : ''; clearTimeout(msgTimer); if (!stay) msgTimer = setTimeout(() => m.hidden = true, 6000);
+}
+
+/* ---- the others ---- */
+function put(f, x, force) {  // a label as the server has it
+  let l = f.labels.find(y => y.id === x.id);
+  if (l && !force && ((l.rev || 0) >= x.rev || mineNow(f, x.id))) return false;
+  if (!l) { l = { id: x.id, poly: [], made: 'a reviewer', agent: '', was: null }; f.labels.push(l); }
+  for (const k of ['box', 'taxon', 'note', 'unsure', 'removed', 'ok', 'rev', 'by', 'at']) l[k] = x[k];
+  f.mark.set(l.id, state(l));
+  return true;
+}
+function reorder(d) {
+  const here = order.indexOf(cur.id);
+  if (d.frame) adopt(d.frame); (d.frames || []).forEach(adopt);
+  order = d.order.filter(i => frames.has(i));
+  if (!order.includes(cur.id)) { leaveWalk(); open(order[Math.max(0, Math.min(here, order.length) - 1)]); }
+  for (const id of [...frames.keys()]) if (!order.includes(id)) frames.delete(id);  // a frame someone took out
+  if (tileKey !== null) tileItems = tileItems.filter(i => frames.has(i.f) || (tileEls.get(i.k).remove(), false));
+  refresh();
+}
+let syncTimer = 0;
+async function sync() {
+  clearTimeout(syncTimer);
+  try {
+    if (me) {
+      const d = await post('/api/sync', { uid: me.uid, session, boot, seq, frame: mode === 'frame' && cur ? cur.id : '', sel: mode === 'frame' ? [...sel].slice(0, 3) : [] });
+      if (d.reload) { load(await get('/api/all')); setupCut(); refresh(); if (cur && mode === 'frame') open(cur.id, true); }
+      else { seq = d.seq; if (d.events.length) take(d.events); }
+      if (isNum(d.cut) && d.cut !== cut && !cutPending && !cutSending) setCut(d.cut, false);
+      if (JSON.stringify(d.favs) !== JSON.stringify(me.favs) && !favBusy) { me.favs = d.favs; favsChanged(); }
+      if (JSON.stringify(d.people) !== JSON.stringify(people)) { people = d.people; showPeople(); draw(); film(); }
+      if (d.page !== page) { page = d.page; say('The editor was updated.', 'Load the new one', () => location.reload(), true); }
+      if ($('status').textContent === 'Offline') status('');
+    }
+  } catch (e) { if (e.status === 401) signedOut(); else if (!failing) status('Offline', true); }
+  syncTimer = setTimeout(sync, document.hidden ? 8000 : 1200);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
+function take(events) {
+  let again = false;
+  for (const e of events) {
+    if (e.order) { reorder(e); continue; }
+    if (e.cut !== undefined) { if (!cutPending && !cutSending && e.cut !== cut) { setCut(e.cut, false); say(`${esc(e.by)} moved the cut to ${fmt(e.cut)}.`); } continue; }
+    const f = frames.get(e.frame); if (!f) continue;
+    for (const x of e.labels) {
+      const shown = mode === 'frame' && f === cur && sel.has(x.id);
+      if (put(f, x) && shown) { again = true; if (x.removed) { sel.delete(x.id); say(`${esc(e.by)} removed that animal.`); } }
+    }
+    if (!(pend.get(f.id) && pend.get(f.id).done) && !(sending && sending.get(f.id) && sending.get(f.id).done)) { f.done = f.markDone = e.done; f.by = e.done_by; f.done_cut = isNum(e.done_cut) ? e.done_cut : null; }
+  }
+  refresh();
+  if (again && !pop.hidden) { if (walk && !sel.size) go(walk.k); else if (!typed) openPop(); }
+}
+const personColour = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${h % 360} 75% 72%)`; };
+const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+function showPeople() {
+  const P = $('people'); P.replaceChildren();
+  for (const p of people) {
+    const b = document.createElement('button'); b.className = 'av'; b.style.background = personColour(p.session); b.textContent = initials(p.name);
+    b.title = p.frame ? `${p.name} is on frame ${p.frame}. Click to go there.` : `${p.name} is looking at tiles.`;
+    b.onclick = () => { if (p.frame && frames.has(p.frame)) { leaveWalk(); setMode('frame'); open(p.frame); } };
+    P.append(b);
+  }
+}
+
+/* ---- profile and stars ---- */
+function signedOut() { me = null; disk.set('uid', null); profile(); }
+function profile(edit) {
+  $('start').hidden = false; $('who-err').hidden = true; $('start-how').hidden = !!edit;
+  $('start-title').textContent = edit ? 'Your profile' : title;
+  $('name').value = me ? me.name : disk.get('who') || ''; $('email').value = me ? me.email : '';
+  $('who-go').textContent = edit ? 'Save' : 'Start'; $('who-cancel').hidden = $('who-other').hidden = !edit;
+  $($('name').value && !edit ? 'email' : 'name').focus();
+}
+$('who').onsubmit = async e => {
+  e.preventDefault();
+  try { me = await post('/api/profile', { uid: me ? me.uid : null, name: $('name').value, email: $('email').value }); }
+  catch (err) { $('who-err').hidden = false; $('who-err').textContent = err.status === 400 ? 'Please check the form: ' + err.message + '.' : 'The server did not answer. Try again.'; return; }
+  disk.set('uid', me.uid); $('start').hidden = true; signedIn(); flush(); sync();
+};
+$('who-cancel').onclick = () => { $('start').hidden = true; };
+$('who-other').onclick = async () => { await flush(); me = null; disk.set('uid', null); disk.set('who', ''); $('b-who').textContent = ''; profile(); $('name').value = $('email').value = ''; $('name').focus(); };
+$('b-who').onclick = () => profile(!!me);
+function signedIn() { $('b-who').textContent = me.name; favsChanged(); }
+let favBusy = 0;
+const starred = t => !!(me && t && me.favs.some(x => key(x) === key(t)));
+function starBtn(t) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'star'; b.dataset.t = key(t);
+  markStar(b); b.onclick = e => { e.stopPropagation(); toggleStar(t); };
+  return b;
+}
+function markStar(b) { const on = !!me && me.favs.some(x => key(x) === b.dataset.t); b.setAttribute('aria-pressed', on); b.textContent = on ? '★' : '☆'; b.title = on ? 'Remove the star' : 'Star this name'; b.setAttribute('aria-label', b.title); }
+async function toggleStar(t) {
+  if (!me) return profile();
+  const on = !starred(t), clean = { id: t.id || null, name: t.name, rank: t.rank || '' };
+  me.favs = on ? [...me.favs, clean] : me.favs.filter(x => key(x) !== key(t));
+  favsChanged(); favBusy++;
+  try { me.favs = (await post('/api/fav', { uid: me.uid, taxon: clean, on })).favs; } catch { status('Star not saved', true); }
+  favBusy--; favsChanged();
+}
+function favsChanged() {
+  if (armed && !starred(armed)) setArm(null);
+  document.querySelectorAll('.star').forEach(markStar); asideFavs(); tileList();
+  if (!pop.hidden) { const d = $('pop-favs'); if (d) favRow(d, name, 'These get the number keys. Star a name with ☆ to keep it here.'); placePop(); }
+}
+// The starred names as buttons; the first nine have the number keys.
+function favRow(box, use, empty) {
+  box.replaceChildren();
+  if (!me || !me.favs.length) { if (empty) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = empty; box.append(p); } return; }
+  me.favs.forEach((t, k) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'fav'; b.title = common(t) || t.name;
+    b.innerHTML = `${k < 9 ? `<kbd>${k + 1}</kbd>` : ''}<span>${sci(t)}</span>`;
+    b.setAttribute('aria-pressed', !!armed && key(armed) === key(t)); b.onclick = () => use(t);
+    box.append(b);
+  });
+}
+function asideFavs() {
+  const F = $('favs'); F.replaceChildren();
+  const h = document.createElement('h2'), d = document.createElement('div'); h.textContent = 'Starred names'; d.className = 'favs'; F.append(h, d);
+  favRow(d, t => picks().length ? name(t) : setArm(armed && key(armed) === key(t) ? null : t), 'None yet. Star a name with ☆ and it stays here, with a number key.');
+  if (me && me.favs.length) { const p = document.createElement('p'); p.className = 'hint'; p.style.marginTop = '6px'; p.textContent = armed ? `Click animals to name them ${armed.name}. Esc stops.` : 'Pick one, then click animals to name them.'; F.append(p); }
+}
+function setArm(t) {  // the next clicks on animals give this name
+  armed = t; stage.classList.toggle('arm', !!t); asideFavs();
+  if (t) { leaveWalk(); deselect(); stopVideo(); say(adding ? `Drag boxes: each is named ${sci(t)}. Press Esc to stop adding.` : `Click animals to name them ${sci(t)}. Press Esc to stop.`); }
+}
+
+/* ---- frames ---- */
+async function start() {
+  const [all, t] = await Promise.all([get('/api/all'), get('/taxa.json')]);
+  taxa = t.taxa; taxa.forEach(x => byId.set(x.id, x)); taxa.forEach(known);
+  for (const [id, [name, rank]] of Object.entries(t.above || {})) known({ id: +id, name, rank });
+  for (const x of taxa) (x.line || []).forEach((id, k) => { const a = above.get(id); if (a && !a.line) a.line = x.line.slice(0, k); });
+  load(all); learn(); setupCut(); $('b-vid').hidden = !hasVideo;
+  document.title = title; $('title').textContent = title; $('title').title = title;
+  const uid = disk.get('uid');
+  if (uid) try { me = await post('/api/hello', { uid }); } catch (e) { if (e.status !== 401) throw e; }
+  cur = frames.get(order.find(id => !frames.get(id).done) || order[0]);
+  route();
+  if (me) signedIn(); else profile();
+  sync();
+}
+function route() {  // what the address says to show
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h === 'cut' && !frames.has('cut') && cutMode === 'tune' && cut !== null) { if (walk && walk.kind === 'cut') return backToCut(); if (!cur.mapped) open(cur.id, false, true); return showCut(); }
+  if (h.startsWith('tiles/')) { if (walk && walk.kind === 'tiles') return backToTiles(); if (!cur.mapped) open(cur.id, false, true); return showTiles(h.slice(6)); }
+  leaveWalk(); setMode('frame'); open(frames.has(h) && order.includes(h) ? h : cur.id, false, true);
+}
+addEventListener('popstate', route);
+function open(id, keep, routed) {  // keep: same frame again, leave the zoom and the walk alone
+  const f = frames.get(id); if (!f) return;
+  flush(); stopVideo(); if (!keep) setAdd(false);
+  const same = cur === f && keep;
+  if (!same) { sel.clear(); hover = null; closePop(); colours = new Map(); }
+  cur = f; cur.mapped = true;
+  $('empty').hidden = true;
+  const im = $('img'), src = `/img/${id}.jpg?${built}`;
+  im.width = f.w; im.height = f.h; im.style.width = f.w + 'px'; im.style.height = f.h + 'px'; im.alt = `Frame ${id}`;
+  if (im.getAttribute('src') !== src) im.src = src;
+  if (!same) fit();
+  if (mode === 'frame' && !routed) history.replaceState(null, '', '#' + id);
+  refresh();
+  const nx = order[order.indexOf(id) + 1];
+  if (nx) new Image().src = `/img/${nx}.jpg?${built}`;
+}
+const count = f => live(f).length;
+const hush = () => { if (!$('msg').dataset.stay) $('msg').hidden = true; };
+function progress() {
+  const n = order.length; let d = 0, a = 0, c = 0;
+  for (const id of order) { const f = frames.get(id); if (f.done) d++; for (const l of f.labels) if (keptL(f, l)) { a++; if (checked(f, l)) c++; } }
+  $('progress').textContent = `${c} of ${a} checked`; $('progress').title = `${d} of ${n} frames, ${c} of ${a} animals checked`; $('bar').firstElementChild.style.width = (a ? 100 * c / a : 0) + '%';
+}
+function film() {
+  const F = $('film'), on = cur ? cur.id : '';
+  if (F.children.length !== order.length || [...F.children].some((b, k) => b.dataset.id !== order[k])) F.replaceChildren(...order.map(id => {
+    const b = document.createElement('button'); b.dataset.id = id; b.title = id;
+    b.innerHTML = `<img loading="lazy" src="/thumb/${id}.jpg?${built}" alt=""><span class="w"></span><span class="t"></span>`;
+    b.onclick = () => { const again = walk && walk.kind === 'frame'; leaveWalk(); open(id); if (again) startWalk(); };
+    return b;
+  }));
+  for (const b of F.children) {
+    const f = frames.get(b.dataset.id), n = count(f), P = people.filter(p => p.frame === f.id);
+    const part = f.done && live(f).some(l => !checked(f, l));
+    b.className = (f.id === on ? 'on ' : '') + (f.done ? (part ? 'part ' : 'ok ') : '') + (f.new ? 'new' : ''); b.querySelector('.t').textContent = f.done ? '✓ ' + n : n;
+    b.querySelector('.w').innerHTML = P.slice(0, 3).map(p => `<i style="background:${personColour(p.session)}">${esc(initials(p.name))}</i>`).join('');
+    b.title = part ? `${f.id}: checked, but the cut has been lowered since and shows labels nobody checked` : f.id;
+    b.setAttribute('aria-label', `Frame ${f.id}, ${plural(n, 'animal')}${f.done ? ', checked' : ''}${P.length ? ', ' + P.map(p => p.name).join(' and ') + ' here' : ''}`);
+  }
+  const b = F.querySelector('.on');
+  if (b && b.dataset.id !== F.dataset.at) { F.dataset.at = b.dataset.id; if (b.offsetLeft < F.scrollLeft || b.offsetLeft + b.offsetWidth > F.scrollLeft + F.clientWidth) F.scrollLeft = b.offsetLeft - F.clientWidth / 2; }
+}
+function step(d) { const id = order[order.indexOf(cur.id) + d]; if (id) { const again = walk && walk.kind === 'frame'; leaveWalk(); open(id); if (again) startWalk(); } }
+function finish() {
+  const again = walk && walk.kind === 'frame';
+  if (!cur.done) { cur.done = true; commit([cur]); }
+  const k = order.indexOf(cur.id), nx = order.slice(k + 1).find(i => !frames.get(i).done) || order.find(i => !frames.get(i).done);
+  leaveWalk();
+  if (!nx) return say('Every frame is checked.');
+  open(nx); if (again) startWalk();
+}
+function reopen() { cur.done = false; commit([cur]); }
+
+/* ---- going through animals one by one (a frame's, or the tiles') ---- */
+let walk = null;  // { kind, items: [{f, id}], k, end }
+function walkOrder(f) {  // one name after the other, the unnamed first; within a name the nearest one next
+  const groups = new Map();
+  for (const l of live(f)) { const k = key(l.taxon); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); }
+  const mid = l => [(l.box[0] + l.box[2]) / 2, (l.box[1] + l.box[3]) / 2]; let at = [0, 0]; const out = [];
+  for (const g of [...groups].sort((a, b) => !!a[0] - !!b[0] || b[1].length - a[1].length).map(x => x[1])) {
+    const left = [...g];
+    while (left.length) {
+      let best = 0, bd = Infinity;
+      left.forEach((l, i) => { const m = mid(l), d = Math.hypot(m[0] - at[0], m[1] - at[1]); if (d < bd) { bd = d; best = i; } });
+      const l = left.splice(best, 1)[0]; at = mid(l); out.push(l);
+    }
+  }
+  return out;
+}
+function startWalk(id) {
+  if (!cur) return;
+  setArm(null); setAdd(false); stopVideo();
+  const items = walkOrder(cur).map(l => ({ f: cur.id, id: l.id }));
+  walk = { kind: 'frame', items, k: -1, end: false };
+  let k = id ? items.findIndex(i => i.id === id) : items.findIndex(i => !labelOf(i.f, i.id).ok);
+  go(Math.max(0, k));
+}
+function go(k) {
+  const W = walk, way = k >= W.k ? 1 : -1;
+  const find = W.kind === 'cut' ? anyLabel : labelOf;
+  while (k >= 0 && k < W.items.length && !find(W.items[k].f, W.items[k].id)) k += way;
+  if (k < 0) return;
+  if (k >= W.items.length) return walkEnd();
+  const it = W.items[k], first = W.k < 0 || W.end; W.k = k; W.end = false;
+  if (mode !== 'frame') setMode('frame');
+  const moved = cur.id !== it.f;
+  if (moved) open(it.f);
+  const l = find(it.f, it.id);
+  if (W.kind === 'cut') { if (l.removed && !showRemoved) setShowRemoved(true, true); if (belowCut(cur, l) && !showDropped) setShowDropped(true, true); }
+  sel = new Set([l.id]); hover = null; look(l, W.kind !== 'frame' && (moved || first)); side(); openPop();
+  const nx = W.items[k + 1]; if (nx && nx.f !== it.f) new Image().src = `/img/${nx.f}.jpg?${built}`;
+}
+function walkEnd() {
+  if (walk.kind === 'tiles') { backToTiles(); return say('That was the last one.'); }
+  if (walk.kind === 'cut') { backToCut(); return say('That was the last one.'); }
+  walk.end = true; walk.k = walk.items.length; sel.clear(); fly(fitted());
+  const L = live(), un = L.filter(l => !l.taxon).length;
+  pop.innerHTML = `<div class="wnav"><button class="btn" id="w-prev" aria-label="Back">←</button><span class="num">${L.length ? 'All ' + L.length + ' seen' : 'No animals here'}</span><button class="btn plain" id="w-stop" style="margin-left:auto">Stop <kbd>Esc</kbd></button></div><div class="end"><p>${L.length ? `That was every animal in this frame.${un ? ` ${plural(un, 'animal')} still ${un === 1 ? 'has' : 'have'} no name.` : ''}` : 'Nothing is labelled in this frame.'}</p>
+    <button class="btn go" id="w-done">Frame is right, next frame <kbd>Enter</kbd></button><button class="btn" id="w-add">Add a missing animal <kbd>B</kbd></button>${L.length ? '<button class="btn" id="w-again">Go through them again</button>' : ''}</div>`;
+  dock(true);
+  $('w-prev').onclick = () => go(walk.items.length - 1); $('w-stop').onclick = stopWalk; $('w-done').onclick = finish; $('w-add').onclick = () => setAdd(true);
+  if ($('w-again')) $('w-again').onclick = () => startWalk(walk.items[0].id);
+  $('w-done').focus({ preventScroll: true }); draw(); side();
+}
+function leaveWalk() { if (!walk) return; walk = null; sel.clear(); closePop(); }
+function stopWalk() { if (!walk) return; if (walk.kind === 'tiles') return backToTiles(); if (walk.kind === 'cut') return backToCut(); leaveWalk(); fly(fitted()); side(); }
+
+/* ---- view ---- */
+const stage = $('stage');
+// The stage without the strip kept for the player (on a phone the player sits under the stage instead).
+function reserve() { const r = stage.getBoundingClientRect(), p = getComputedStyle($('player')).position === 'absolute' ? $('player').offsetHeight : 0; return { width: r.width, height: Math.max(80, r.height - p) }; }
+function fitted() { const r = reserve(), k = Math.min(r.width / cur.w, r.height / cur.h); return { k, x: (r.width - cur.w * k) / 2, y: (r.height - cur.h * k) / 2 }; }
+function fit() { if (cur) { cancelAnimationFrame(flight); view = fitted(); fitK = view.k; size = reserve(); } }
+function zoomAt(px, py, f) {
+  const k = Math.min(Math.max(view.k * f, fitK), 16);
+  view = held({ k, x: px - (px - view.x) * k / view.k, y: py - (py - view.y) * k / view.k }); draw();
+}
+function held(v) {  // the frame always fills the stage as far as it can
+  const r = reserve(), w = cur.w * v.k, h = cur.h * v.k;
+  return { k: v.k, x: w <= r.width ? (r.width - w) / 2 : Math.min(0, Math.max(r.width - w, v.x)), y: h <= r.height ? (r.height - h) / 2 : Math.min(0, Math.max(r.height - h, v.y)) };
+}
+let flight = 0, size = null;
+function fly(to) {
+  cancelAnimationFrame(flight); to = held(to);
+  const from = { ...view }, t0 = performance.now();
+  if (document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) { view = to; return draw(); }
+  const tick = t => {
+    const p = Math.min(1, Math.max(0, (t - t0) / 170)), e = 1 - (1 - p) ** 3;
+    view = { k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+    draw(); if (p < 1) flight = requestAnimationFrame(tick);
+  };
+  tick(t0); flight = requestAnimationFrame(tick);
+}
+// Bring an animal into view. The zoom changes only when it is too small or too big to judge (or zoom is asked for).
+function look(l, zoom) {
+  const r = reserve(), b = l.box, m = Math.max(b[2] - b[0], b[3] - b[1]), S = Math.min(r.width, r.height), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  let k = view.k;
+  if (zoom || m * k < 0.07 * S || m * k > 0.75 * S) {
+    k = Math.min(Math.max(0.34 * S / m, zoom ? fitK * 1.5 : fitK), fitK * 3);
+    if (m * k > 0.75 * S) k = Math.max(fitK, 0.75 * S / m);
+  }
+  const px = cx * view.k + view.x, py = cy * view.k + view.y;
+  if (k === view.k && px > r.width * 0.12 && px < r.width * 0.88 && py > r.height * 0.12 && py < r.height * 0.88) return draw();
+  fly({ k, x: r.width / 2 - cx * k, y: r.height / 2 - cy * k });
+}
+const toImg = e => { const r = stage.getBoundingClientRect(); return [(e.clientX - r.left - view.x) / view.k, (e.clientY - r.top - view.y) / view.k]; };
+function draw() {
+  if (!cur) return;
+  const T = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  $('img').style.transform = T; $('vid').style.transform = T; $('vid').style.width = cur.w + 'px'; $('vid').style.height = cur.h + 'px';
+  $('player').classList.toggle('on', !$('vid').hidden);
+  $('img').classList.toggle('lit', lit); $('vid').classList.toggle('lit', lit);
+  const S = $('over'); S.replaceChildren();
+  if ((hidden && !drag) || !$('vid').hidden) { placePop(); return; }
+  const g = el('g', { transform: `translate(${view.x} ${view.y}) scale(${view.k})` }, S);
+  const L = live().slice().sort((a, b) => area(b.box) - area(a.box)), X = extra().sort((a, b) => area(b.box) - area(a.box));
+  if (X.some(l => l.removed)) hatch(S);
+  for (const l of X) {  // under the kept ones: dashed grey when under the cut, crossed out in red when removed
+    const on = sel.has(l.id), d = masked(l) ? outline(l) : `M${l.box[0]} ${l.box[1]}H${l.box[2]}V${l.box[3]}H${l.box[0]}Z`;
+    if (l.removed) el('path', { class: 'halo', d }, g);
+    el('path', { class: (l.removed ? 'rem' : 'drop') + (on ? ' sel' : '') + (hover === l.id ? ' hover' : ''), d, 'fill-rule': 'evenodd', ...(l.removed ? { fill: 'url(#hatch)' } : {}) }, g);
+    if (on) el('rect', { class: 'b', x: l.box[0], y: l.box[1], width: l.box[2] - l.box[0], height: l.box[3] - l.box[1], stroke: '#fff' }, g);
+  }
+  for (const l of L) {
+    const c = colour(l.taxon), on = sel.has(l.id), cls = (on ? ' sel' : walk && l.ok ? ' seen' : '') + (hover === l.id || hover === 'g:' + key(l.taxon) ? ' hover' : '') + (l.taxon ? '' : ' need');
+    if (masked(l)) el('path', { class: 'm' + cls, fill: c, stroke: on ? '#fff' : c, 'fill-rule': 'evenodd', d: outline(l) }, g);
+    else el('rect', { class: 'b' + cls, x: l.box[0], y: l.box[1], width: l.box[2] - l.box[0], height: l.box[3] - l.box[1], stroke: on ? '#fff' : c }, g);
+    if (on && masked(l)) el('rect', { class: 'b', x: l.box[0], y: l.box[1], width: l.box[2] - l.box[0], height: l.box[3] - l.box[1], stroke: '#fff' }, g);
+  }
+  for (const p of people) if (p.frame === cur.id) for (const id of p.sel) {  // what the others have open
+    const l = labelOf(cur.id, id); if (!l) continue;
+    const c = personColour(p.session), pad = 5 / view.k;
+    el('rect', { class: 'them', x: l.box[0] - pad, y: l.box[1] - pad, width: l.box[2] - l.box[0] + 2 * pad, height: l.box[3] - l.box[1] + 2 * pad, stroke: c }, g);
+    el('text', { x: Math.max(4, sx(l.box[0])), y: sy(l.box[3]) + 18, fill: c }, S).textContent = p.name;
+  }
+  for (const l of X) if (l.removed) drawStamp(S, l);
+  for (const l of [...L, ...X]) if (allNames || sel.has(l.id) || hover === l.id) tag(S, l);
+  if (sel.size === 1) handles(S, L.find(l => sel.has(l.id)));
+  actBtn(S);
+  if (drag && drag.kind === 'new' && drag.box) { const b = drag.box; el('rect', { class: 'b', x: b[0], y: b[1], width: b[2] - b[0], height: b[3] - b[1], stroke: '#fff' }, g); }
+  placePop();
+}
+const area = b => (b[2] - b[0]) * (b[3] - b[1]);
+const outline = l => l.poly.map(p => 'M' + p.map(v => v.join(' ')).join('L') + 'Z').join('');
+// A mask fits only the box it was drawn with; once the box is moved the box is what counts.
+const masked = l => l.poly && l.poly.length && l.was && l.box.every((v, k) => Math.abs(v - l.was.box[k]) < 0.5);
+const sx = v => v * view.k + view.x, sy = v => v * view.k + view.y;
+function tag(S, l) {
+  const t = el('text', { x: Math.max(4, sx(l.box[0])), y: Math.max(14, sy(l.box[1]) - 5), fill: l.removed ? '#ff8a80' : keptL(cur, l) ? colour(l.taxon) : '#c3ccd0' }, S);
+  t.textContent = (l.taxon ? l.taxon.name : 'Needs a name') + (l.unsure ? ' ?' : '') + (cutMode === 'tune' && scored(l) ? ` · ${fmt(l.s)}` : '');
+  if (l.taxon && italic(l.taxon)) t.setAttribute('font-style', 'italic');
+}
+function handles(S, l) {
+  if (!l) return;
+  const xs = [l.box[0], (l.box[0] + l.box[2]) / 2, l.box[2]], ys = [l.box[1], (l.box[1] + l.box[3]) / 2, l.box[3]];
+  const off = [0, 1].map(a => (l.box[a + 2] - l.box[a]) * view.k < 44 ? 7 : 0);  // on a small box the handles stand clear of the animal
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if ((i !== 1 || j !== 1) && (i !== 1 || !off[0]) && (j !== 1 || !off[1])) {
+    const h = el('rect', { class: 'handle', x: sx(xs[i]) + (i - 1) * off[0] - 5, y: sy(ys[j]) + (j - 1) * off[1] - 5, width: 10, height: 10, rx: 2 }, S);
+    h.style.cursor = (i === 1 ? 'ns' : j === 1 ? 'ew' : i === j ? 'nwse' : 'nesw') + '-resize';
+    h.addEventListener('pointerdown', e => { e.stopPropagation(); grab(e, { kind: 'resize', l, i, j, from: l.box.slice() }); });
+  }
+}
+function hatch(S) {  // the fill of removed labels: red diagonal lines that keep their spacing on the screen
+  const d = el('defs', {}, S), u = 1 / view.k, s = 9 * u;
+  const p = el('pattern', { id: 'hatch', patternUnits: 'userSpaceOnUse', width: s, height: s, patternTransform: 'rotate(45)' }, d);
+  el('rect', { width: s, height: s, fill: 'rgba(255,80,80,0.10)' }, p);
+  el('line', { x1: s / 2, y1: 0, x2: s / 2, y2: s, stroke: 'rgba(255,92,92,0.75)', 'stroke-width': 2 * u }, p);
+}
+function drawStamp(S, l) {  // a red ✕ in the middle of a removed label
+  const x = sx((l.box[0] + l.box[2]) / 2), y = sy((l.box[1] + l.box[3]) / 2), r = 7, g = el('g', { class: 'stamp' }, S);
+  for (const [w, c] of [[6, 'rgba(0,0,0,.8)'], [3, '#ff6b6b']]) for (const s of [1, -1]) el('line', { x1: x - r, y1: y - r * s, x2: x + r, y2: y + r * s, stroke: c, 'stroke-width': w }, g);
+}
+const actionOf = (f, l) => l.removed ? 'back' : belowCut(f, l) ? 'keep' : 'x';
+function actBtn(S) {  // the button on the label under the pointer: what X does to it
+  if (!hover || hover.startsWith('g:') || adding || armed || drag || hidden || !$('vid').hidden || TOUCH) return;
+  const l = cur.labels.find(x => x.id === hover); if (!l || !(keptL(cur, l) || extra().includes(l))) return;
+  const R = stage.getBoundingClientRect(), k = actionOf(cur, l);
+  const x = Math.min(Math.max(sx(l.box[2]) + 15, 14), R.width - 14), y = Math.min(Math.max(sy(l.box[1]) + 11, 14), R.height - 14);  // right of the box, clear of its name
+  const g = el('g', { class: 'act ' + k, 'data-id': l.id, transform: `translate(${x} ${y})` }, S);
+  el('title', {}, g).textContent = k === 'x' ? 'Remove it (X)' : k === 'keep' ? 'Keep it, whatever the cut (X)' : 'Put it back (X)';
+  el('circle', { r: 11 }, g);
+  if (k === 'back') { const t = el('text', { class: 'ico', y: 1 }, g); t.textContent = '↺'; }
+  else el('path', { d: k === 'x' ? 'M-4-4L4 4M4-4L-4 4' : 'M-5 0.5L-1.5 4L5-3.5' }, g);
+}
+// X, the ✕ on a label, ✓ on one under the cut, ↺ on a removed one: one step each way, with Undo.
+function flip(l, f) {
+  f = f || cur;
+  const k = actionOf(f, l), what = l.taxon ? sci(l.taxon) : 'a label';
+  if (k === 'back') l.removed = false; else if (k === 'keep') l.ok = true; else l.removed = true;
+  const text = k === 'x' ? `Removed ${what}` : k === 'keep' ? `Kept ${what}, whatever the cut` : `Put ${what} back`;
+  if (mode === 'frame' && walk && walk.kind === 'frame' && k === 'x' && walk.items[walk.k] && walk.items[walk.k].id === l.id) { after([{ f, l }], text); return say(text, 'Undo', doUndo); }
+  if (k === 'x' && !showRemoved && sel.has(l.id)) { sel.delete(l.id); if (!sel.size && !walk) closePop(); }
+  commit([f]); say(text, 'Undo', doUndo);
+  if (mode === 'frame' && !pop.hidden && picks().length) openPop();
+}
+function xKey() {
+  const h = hover && !hover.startsWith('g:') && cur.labels.find(x => x.id === hover), P = picks(), l = h || (P.length === 1 ? P[0].l : null);
+  if (l && (keptL(cur, l) || extra().includes(l))) flip(l);
+}
+function setShowRemoved(on, quiet) {
+  showRemoved = on; disk.set(cutMode === 'tune' ? 'rem-t' : 'rem', on ? '1' : '0'); unsee(); refresh();
+  if (!quiet) say(on ? 'Removed labels are shown, crossed out. R hides them.' : 'Removed labels are hidden. R shows them.');
+}
+function setShowDropped(on, quiet) {
+  if (cutMode !== 'tune') return;
+  showDropped = on; disk.set('drop', on ? '1' : '0'); unsee(); refresh();
+  if (!quiet) say(on ? 'Labels under the cut are shown, dashed. D hides them.' : 'Labels under the cut are hidden. D shows them.');
+}
+function unsee() {  // nothing stays selected that is no longer drawn
+  if (!cur || mode !== 'frame') return;
+  const shown = new Set([...live(), ...extra()].map(l => l.id)), n = sel.size;
+  sel = new Set([...sel].filter(i => shown.has(i)));
+  if (n && !sel.size && !walk) closePop();
+}
+function inside(l, x, y, pad) {
+  if (masked(l)) {
+    let hit = false;
+    for (const p of l.poly) for (let a = 0, b = p.length - 1; a < p.length; b = a++)
+      if ((p[a][1] > y) !== (p[b][1] > y) && x < (p[b][0] - p[a][0]) * (y - p[a][1]) / (p[b][1] - p[a][1]) + p[a][0]) hit = !hit;
+    if (hit) return 2;
+  }
+  return x >= l.box[0] - pad && x <= l.box[2] + pad && y >= l.box[1] - pad && y <= l.box[3] + pad ? 1 : 0;
+}
+function at(x, y) {  // the smallest mask under the pointer, else the smallest box; kept labels before the others shown
+  const pad = 4 / view.k;
+  for (const L of [live(), extra()]) {
+    let best = null, score = 0;
+    for (const l of L) { const s = inside(l, x, y, pad); if (s && (s > score || (s === score && area(l.box) < area(best.box)))) { best = l; score = s; } }
+    if (best) return best;
+  }
+  return null;
+}
+
+/* ---- pointer ---- */
+function grab(e, d) { cancelAnimationFrame(flight); drag = d; drag.p = [e.clientX, e.clientY]; drag.m = toImg(e); stage.setPointerCapture(e.pointerId); }
+stage.addEventListener('pointerdown', e => {
+  if (!cur || e.button > 1) return;
+  const a = e.target.closest && e.target.closest('.act');
+  if (a) { e.preventDefault(); const l = cur.labels.find(x => x.id === a.dataset.id); if (l) flip(l); return; }
+  const [x, y] = toImg(e);
+  if (adding && e.button === 0) return grab(e, { kind: 'new' });
+  const l = hidden || !$('vid').hidden ? null : at(x, y);
+  if (l && !armed && e.button === 0 && sel.size === 1 && sel.has(l.id) && !e.shiftKey) return grab(e, { kind: 'move', l, from: l.box.slice() });
+  grab(e, { kind: 'pan', l: e.button === 0 ? l : null, v: { ...view }, shift: e.shiftKey });
+  e.preventDefault();
+});
+stage.addEventListener('pointermove', e => {
+  if (!cur) return;
+  if (!drag) {
+    if (e.target.closest && e.target.closest('.act')) return;  // on the label's button: keep it
+    let l = hidden || adding || !$('vid').hidden ? null : at(...toImg(e));
+    if (!l && hover && !hover.startsWith('g:') && !hidden && !adding) {  // just outside the label that has the button: keep it, so the pointer can reach it
+      const o = cur.labels.find(x => x.id === hover), [x, y] = toImg(e), pad = 30 / view.k;
+      if (o && x >= o.box[0] - pad && x <= o.box[2] + pad && y >= o.box[1] - pad && y <= o.box[3] + pad && (keptL(cur, o) || extra().includes(o))) l = o;
+    }
+    const h = l ? l.id : null;
+    stage.classList.toggle('hot', !!l);
+    if (h !== hover) { hover = h; draw(); }
+    return;
+  }
+  const dx = e.clientX - drag.p[0], dy = e.clientY - drag.p[1], [x, y] = toImg(e);
+  if (!drag.on && Math.hypot(dx, dy) < 4) return;
+  drag.on = true;
+  if (drag.kind === 'pan') { stage.classList.add('drag'); view = held({ k: view.k, x: drag.v.x + dx, y: drag.v.y + dy }); }
+  else if (drag.kind === 'new') drag.box = tidy([drag.m[0], drag.m[1], x, y]);
+  else if (drag.kind === 'move') {
+    const f = drag.from, mx = Math.min(Math.max(x - drag.m[0], -f[0]), cur.w - f[2]), my = Math.min(Math.max(y - drag.m[1], -f[1]), cur.h - f[3]);
+    drag.l.box = [f[0] + mx, f[1] + my, f[2] + mx, f[3] + my].map(r1);
+  } else {
+    const f = drag.from.slice(), cx = Math.min(Math.max(x, 0), cur.w), cy = Math.min(Math.max(y, 0), cur.h);
+    if (drag.i === 0) f[0] = cx; if (drag.i === 2) f[2] = cx; if (drag.j === 0) f[1] = cy; if (drag.j === 2) f[3] = cy;
+    drag.l.box = tidy(f).map(r1);
+  }
+  draw();
+});
+stage.addEventListener('pointerup', e => {
+  if (!drag) return;
+  const d = drag; drag = null; stage.classList.remove('drag');
+  if (d.kind === 'new') {
+    if (!d.box || d.box[2] - d.box[0] < 3 || d.box[3] - d.box[1] < 3) { draw(); return say('Drag a box around the animal.'); }
+    const l = { id: 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), box: d.box.map(r1), taxon: armed ? { ...armed } : null, note: '', unsure: false, removed: false, ok: !!armed, rev: 0, poly: [], made: 'a reviewer', agent: '', was: null };
+    cur.labels.push(l); sel = new Set(armed ? [] : [l.id]);
+    if (walk) { walk.items.splice(Math.min(walk.k + (walk.end ? 0 : 1), walk.items.length), 0, { f: cur.id, id: l.id }); walk.k = walk.items.findIndex(i => i.id === l.id); walk.end = false; }
+    commit([cur]); if (!armed) openPop(); else if (walk) go(walk.k + 1);
+  } else if (!d.on) {
+    if (d.kind === 'resize' || d.kind === 'move') { openPop(); return; }
+    if (!$('vid').hidden) return toggle();
+    if (!d.l) { if (sel.size && !walk) deselect(); return; }
+    if (armed) { d.l.taxon = { ...armed }; d.l.ok = true; remember(armed); return commit([cur]); }
+    if (walk) {
+      let k = walk.items.findIndex(i => i.f === cur.id && i.id === d.l.id);
+      if (k < 0) { k = Math.min(walk.k + 1, walk.items.length); walk.items.splice(k, 0, { f: cur.id, id: d.l.id }); }
+      return go(k);
+    }
+    if (d.shift) { sel.has(d.l.id) ? sel.delete(d.l.id) : sel.add(d.l.id); } else sel = new Set([d.l.id]);
+    draw(); side(); sel.size ? openPop() : closePop();
+  } else if (d.kind === 'resize' || d.kind === 'move') {
+    if (d.l.box[2] - d.l.box[0] < 1 || d.l.box[3] - d.l.box[1] < 1) d.l.box = d.from;  // the server takes boxes of a pixel or more
+    const had = d.l.poly && d.l.poly.length && d.from.every((v, k) => d.l.was && Math.abs(v - d.l.was.box[k]) < 0.5);
+    commit([cur]);
+    if (had && !masked(d.l)) say('Box changed. The old outline no longer fits it and is dropped.', 'Undo', doUndo);
+  } else draw();
+});
+stage.addEventListener('pointercancel', () => { if (drag && drag.from) drag.l.box = drag.from; drag = null; draw(); });
+stage.addEventListener('pointerleave', () => { if (hover && !drag) { hover = null; draw(); } });
+stage.addEventListener('wheel', e => {
+  if (!cur) return;
+  e.preventDefault(); cancelAnimationFrame(flight);
+  const r = stage.getBoundingClientRect();
+  zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.002)));
+}, { passive: false });
+stage.addEventListener('dblclick', () => { if (!adding && !armed) fly(fitted()); });
+const r1 = v => Math.round(v * 10) / 10;
+const tidy = b => [Math.max(0, Math.min(b[0], b[2])), Math.max(0, Math.min(b[1], b[3])), Math.min(cur.w, Math.max(b[0], b[2])), Math.min(cur.h, Math.max(b[1], b[3]))];
+new ResizeObserver(() => {  // keep the zoom and what is in the middle
+  const r = reserve(); if (!cur || !r.width || !size) return;
+  const z = view.k / fitK, cx = (size.width / 2 - view.x) / view.k, cy = (size.height / 2 - view.y) / view.k;
+  fit(); if (z > 1.01) { const k = fitK * z; view = held({ k, x: r.width / 2 - cx * k, y: r.height / 2 - cy * k }); } draw();
+  const P = picks(); if (P.length === 1 && !pop.hidden) closeUp(P[0].f, P[0].l);
+}).observe(stage);
+
+/* ---- side ---- */
+const GRID = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 1h6v6H1zM9 1h6v6H9zM1 9h6v6H1zM9 9h6v6H9z"/></svg>';
+function taxonRow(g, opt) {  // a name with its count, its tiles and its star
+  const d = document.createElement('div'), b = document.createElement('button'), c = common(g.t);
+  d.className = 'gr' + (opt.on ? ' on' : ''); b.className = 'g';
+  b.innerHTML = `<span class="sw ${g.t || opt.all ? '' : 'need'}" style="background:${opt.all ? 'var(--line)' : colour(g.t)}"></span><span>${opt.all ? 'All names' : sci(g.t)}</span><span class="c" title="checked / all">${opt.part ? `${g.ok} / ${g.n}` : g.n}</span>${opt.sub || c ? `<span class="sub">${esc(opt.sub || c)}</span>` : ''}`;
+  b.title = opt.title || ''; b.onclick = opt.use; d.append(b);
+  if (opt.tiles) { const a = document.createElement('button'); a.className = 'all'; a.innerHTML = GRID; a.title = 'See every one of these, in all frames'; a.setAttribute('aria-label', a.title); a.onclick = opt.tiles; d.append(a); }
+  if (g.t) d.append(starBtn(g.t));
+  return d;
+}
+function pane() {
+  const d = pop.classList.contains('dock') && !pop.hidden;
+  $('a-dock').hidden = !d; $('a-frame').hidden = d || mode !== 'frame'; $('a-tiles').hidden = d || mode !== 'tiles'; $('a-cut').hidden = d || mode !== 'cut';
+}
+function side() {
+  pane(); if (!cur) return;
+  const L = live(), groups = new Map();
+  for (const l of L) { const k = key(l.taxon); if (!groups.has(k)) groups.set(k, { t: l.taxon, ls: [], n: 0, ok: 0 }); const g = groups.get(k); g.ls.push(l); g.n++; if (checked(cur, l)) g.ok++; }
+  const rows = [...groups.values()].sort((a, b) => !!a.t - !!b.t || b.n - a.n || (a.t ? a.t.name.localeCompare(b.t.name) : 0));
+  const box = $('list'), S = box.parentElement, top = S.scrollTop; box.replaceChildren();
+  if (rows.length) { const h = document.createElement('h2'); h.textContent = 'In this frame'; box.append(h); }
+  for (const g of rows) {
+    const row = taxonRow(g, { on: g.ls.some(l => sel.has(l.id)), part: g.ok > 0, title: g.n > 1 ? `Select all ${g.n}` : 'Select it', use: () => { setArm(null); sel = new Set(g.ls.map(l => l.id)); draw(); side(); openPop(); }, tiles: () => showTiles(key(g.t)) });
+    row.onmouseenter = () => { hover = 'g:' + key(g.t); draw(); };
+    row.onmouseleave = () => { hover = null; draw(); };
+    box.append(row);
+  }
+  if (!rows.length) box.innerHTML = '<h2>No animals labelled in this frame</h2>';
+  const gone = cur.labels.filter(l => l.removed && l.was);
+  if (gone.length) {
+    const h = document.createElement('h2'); h.textContent = `Removed: ${gone.length}`; box.append(h);
+    const b = document.createElement('button'); b.className = 'g'; b.style.width = '100%'; b.innerHTML = '<span></span><span>Put them back</span>';
+    b.onclick = () => { gone.forEach(l => l.removed = false); commit([cur]); }; box.append(b);
+    const s = document.createElement('button'); s.className = 'g'; s.style.width = '100%'; s.innerHTML = `<span></span><span>${showRemoved ? 'Hide them' : 'Show them, crossed out'} <kbd>R</kbd></span>`;
+    s.onclick = () => setShowRemoved(!showRemoved); box.append(s);
+  }
+  const low = cutMode === 'tune' ? cur.labels.filter(l => belowCut(cur, l)) : [];
+  if (low.length) {
+    const h = document.createElement('h2'); h.textContent = `Under the cut: ${low.length}`; box.append(h);
+    const b = document.createElement('button'); b.className = 'g'; b.style.width = '100%'; b.innerHTML = `<span></span><span>${showDropped ? 'Hide them' : 'Show them, dashed'} <kbd>D</kbd></span>`;
+    b.onclick = () => setShowDropped(!showDropped); box.append(b);
+  }
+  S.scrollTop = top;
+  $('facts').textContent = [cur.new ? 'New frame by ' + cur.new.by : '', cur.file || cur.id, cur.time ? cur.time + ' UTC' : '', cur.depth != null ? Math.round(cur.depth) + ' m' : '', cur.dive ? 'dive ' + cur.dive : ''].filter(Boolean).join(' · ');
+  $('logs').innerHTML = cur.logs && cur.logs.length ? `${esc(logsName || 'Logs')}: ` + cur.logs.map(x => `${x.taxon ? sci(x.taxon) : esc(x.name)} <span title="${esc(x.comment || '')}">(${Math.abs(x.dt) < 1 ? 'now' : Math.abs(x.dt) + ' s ' + (x.dt < 0 ? 'before' : 'after')})</span>`).join(', ') : '';
+  const un = L.filter(l => !l.taxon).length, left = L.filter(l => !l.ok).length;
+  $('b-walk').hidden = !L.length; $('b-walk').innerHTML = `${left && left < L.length ? `Go through the last ${left}` : `Go through all ${L.length}`} <kbd>S</kbd>`;
+  $('done').innerHTML = cur.done ? `Checked by ${esc(cur.by)}. Open it again` : `Frame is right${un ? ` (${un} unnamed)` : ''} <kbd>Enter</kbd>`;
+  $('done').classList.toggle('go', !cur.done);
+  $('b-vid').disabled = !cur.video; $('drop').hidden = !cur.new;
+}
+
+/* ---- naming ---- */
+const pop = $('pop');
+let hits = [], hi = -1, ask = 0, searchTimer = 0, typed = false;
+// What a name, a removal or a tick applies to: the selected animals on the stage, or the selected tiles.
+function picks() {
+  if (mode === 'tiles') return [...tileSel].map(k => { const [fr, id] = k.split('/'), l = labelOf(fr, id); return l && { f: frames.get(fr), l }; }).filter(Boolean);
+  return [...live(), ...extra()].filter(l => sel.has(l.id)).map(l => ({ f: cur, l }));
+}
+const one = P => P.length && P.every(p => key(p.l.taxon) === key(P[0].l.taxon));
+function dock(on) {
+  pop.classList.toggle('dock', on);
+  const home = on ? $('a-dock') : $('view'); if (pop.parentElement !== home) home.append(pop);
+  if (on) pop.style.left = pop.style.top = '';
+  pop.hidden = false; pane(); if (on) pop.scrollTop = 0;
+}
+function closePop() { pop.hidden = true; pop.replaceChildren(); pop.classList.remove('dock'); pane(); }
+function openPop() {
+  const P = picks(); if (!P.length) return closePop();
+  const { f, l } = P[0], many = P.length > 1, same = one(P), c = same ? common(l.taxon) : '', bulk = mode === 'tiles';
+  const mates = !walk && !bulk && same && l.taxon ? live().filter(x => key(x.taxon) === key(l.taxon)) : [];
+  const src = many ? '' : [l.was === null ? 'Added by ' + (l.by || 'a reviewer') : 'Found by ' + l.made, l.was && l.log && key(l.taxon) === key(l.was.taxon) ? `name from the ${logsName || 'log'}` : (l.agent && (!l.was || !l.was.taxon || l.agent !== l.was.taxon.name) ? `agents: ${l.agent}` : ''), scored(l) ? `${scoreName} ${fmt(l.s)}` : '', l.why || '', l.was && l.by ? `last changed by ${l.by}` : ''].filter(Boolean).join(' · ');
+  const off = many ? '' : l.removed ? `<div class="state">Removed${l.by ? ' by ' + esc(l.by) : ''}. <button class="btn" id="p-back">Put it back <kbd>X</kbd></button></div>`
+    : belowCut(f, l) ? `<div class="state">Under the cut (${esc(scoreName)} ${fmt(l.s)}; the cut is ${fmt(cut)}), so not kept. <button class="btn" id="p-keep">Keep it <kbd>X</kbd></button></div>` : '';
+  const nav = walk ? `<div class="wnav"><button class="btn" id="w-prev" aria-label="Back" title="Back (←)">←</button><span class="num">${walk.k + 1} of ${walk.items.length}</span><button class="btn" id="w-next" aria-label="Skip" title="Skip (→)">→</button><button class="btn plain" id="w-stop" style="margin-left:auto">${walk.kind === 'tiles' ? 'Back to tiles' : walk.kind === 'cut' ? 'Back to the cut' : 'Stop'} <kbd>Esc</kbd></button></div><div class="wbar"><div style="width:${100 * (walk.k + 1) / walk.items.length}%"></div></div>`
+    : bulk ? `<div class="wnav"><span class="num">${P.length} selected</span><button class="btn plain" id="w-stop" style="margin-left:auto">Clear <kbd>Esc</kbd></button></div>` : '';
+  pop.innerHTML = `${nav}<div id="close-up" ${many ? 'hidden' : ''}></div><div class="in">
+    <div class="now"><div>${many ? `<b>${P.length} animals</b>${same ? ': ' + sci(l.taxon) : ''}` : `<b>${sci(l.taxon)}</b>`}${c ? ` <span class="src">${esc(c)}</span>` : ''}</div></div>
+    ${src ? `<div class="src">${esc(src)}</div>` : ''}${off}
+    ${walk || bulk ? `<button class="btn go" id="p-ok">${many ? 'These are right' : belowCut(f, l) ? 'Keep it' + (walk ? ', next' : '') : !l.taxon ? 'Leave it unnamed' + (walk ? ', next' : '') : 'Right' + (walk ? ', next' : '')} <kbd>Enter</kbd></button>` : ''}
+    <div class="favs" id="pop-favs"></div>
+    <input id="q" maxlength="200" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="hits" aria-label="Name" placeholder="${same && l.taxon ? 'Type to change the name' : 'Type a common or scientific name'}">
+    <div id="hits" role="listbox"></div>
+    <div class="row">
+      ${mates.length > P.length ? `<button class="btn" id="p-all">Select all ${mates.length}</button>` : ''}
+      <button class="btn danger" id="p-del">Remove <kbd>Del</kbd></button>
+      <label class="ck"><input type="checkbox" id="p-un" ${P.every(p => p.l.unsure) ? 'checked' : ''}>Not sure of the name</label>
+    </div>
+    <input id="note" maxlength="1000" placeholder="Note (optional)" value="${many ? '' : esc(l.note || '')}" ${many ? 'hidden' : ''}>
+  </div>`;
+  if (same && l.taxon) pop.querySelector('.now').append(starBtn(l.taxon));
+  dock(!!walk || bulk);
+  const q = $('q'); typed = false; hush();
+  q.oninput = () => { typed = true; search(q.value); };
+  q.onkeydown = popKeys;
+  $('p-del').onclick = remove;
+  if ($('p-back')) $('p-back').onclick = () => flip(l, f);
+  if ($('p-keep')) $('p-keep').onclick = () => flip(l, f);
+  $('p-un').onchange = e => { const P = picks(); P.forEach(p => p.l.unsure = e.target.checked); commit(framesOf(P)); };
+  if ($('p-ok')) $('p-ok').onclick = right;
+  if ($('p-all')) $('p-all').onclick = () => { sel = new Set(mates.map(x => x.id)); draw(); side(); openPop(); };
+  if ($('w-prev')) { $('w-prev').onclick = () => go(walk.k - 1); $('w-next').onclick = () => go(walk.k + 1); }
+  if ($('w-stop')) $('w-stop').onclick = () => walk ? stopWalk() : clearTiles();
+  $('note').onchange = e => { const p = picks()[0]; if (p && (p.l.note || '') !== e.target.value) { p.l.note = e.target.value; commit([p.f]); } };
+  $('note').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { e.target.blur(); walk || bulk ? $('q').focus() : deselect(); } };
+  favRow($('pop-favs'), name, walk ? 'Star a name with ☆ to give it a number key.' : '');
+  closeUp(f, l); search(''); placePop(); if (!TOUCH) q.focus({ preventScroll: true });
+}
+const framesOf = P => [...new Set(P.map(p => p.f))];
+function closeUp(f, l) {
+  const d = $('close-up'); if (!d || d.hidden) return;
+  const W = d.clientWidth || 318, H = d.clientHeight || 150, bw = l.box[2] - l.box[0], bh = l.box[3] - l.box[1], s = Math.min(W / (bw * 1.5), H / (bh * 1.5), 5);
+  d.style.backgroundImage = `url("/img/${f.id}.jpg?${built}")`; d.style.backgroundSize = `${f.w * s}px ${f.h * s}px`;
+  d.style.backgroundPosition = `${W / 2 - (l.box[0] + l.box[2]) / 2 * s}px ${H / 2 - (l.box[1] + l.box[3]) / 2 * s}px`;
+  d.style.filter = lit ? 'brightness(1.9) contrast(1.08)' : '';
+}
+function placePop() {
+  if (pop.hidden || pop.classList.contains('dock')) return;
+  const P = picks(); if (!P.length) return closePop();
+  const R = stage.getBoundingClientRect(), W = pop.offsetWidth, H = pop.offsetHeight, gap = 14;
+  let x, y;
+  if (P.length > 1) { x = R.width - W - 8; y = 8; }
+  else {
+    const b = P[0].l.box, L = sx(b[0]), T = sy(b[1]), Rr = sx(b[2]);
+    x = Rr + gap + W <= R.width - 8 ? Rr + gap : L - gap - W >= 8 ? L - gap - W : (L + Rr) / 2 < R.width / 2 ? R.width - W - 8 : 8;
+    y = T - 20;
+  }
+  pop.style.left = Math.max(8, x) + 'px'; pop.style.top = Math.min(Math.max(8, y), Math.max(8, R.height - H - 8)) + 'px';
+}
+function deselect() { sel.clear(); closePop(); draw(); side(); }
+// After a change: on to the next animal, or close.
+function after(P, text) {
+  const fs = framesOf(P);
+  if (mode === 'tiles') { tileSel.clear(); closePop(); commit(fs); return say(text, 'Undo', doUndo); }
+  if (!walk) { sel.clear(); closePop(); }
+  commit(fs);
+  if (walk) go(walk.k + 1);
+}
+function remove() {
+  const P = picks(); if (!P.length) return;
+  P.forEach(p => p.l.removed = true);
+  const text = P.length > 1 ? `Removed ${P.length} labels` : `Removed ${P[0].l.taxon ? sci(P[0].l.taxon) : 'a label'}`;
+  after(P, text); if (mode === 'frame') say(text, 'Undo', doUndo);
+}
+function right() {
+  const P = picks(); if (!P.length) return;
+  P.forEach(p => p.l.ok = true); after(P, `${plural(P.length, 'animal')} marked right`);
+}
+function remember(t) {
+  lastTaxon = { id: t.id || null, name: t.name, rank: t.rank || '' };
+  recent = [lastTaxon, ...recent.filter(x => key(x) !== key(lastTaxon))].slice(0, 12); disk.set('recent', JSON.stringify(recent));
+}
+function name(t) {
+  const P = picks(); if (!P.length || !t) return;
+  remember(t);
+  P.forEach(p => { p.l.taxon = { ...lastTaxon }; p.l.ok = true; });
+  after(P, `${plural(P.length, 'animal')} named ${sci(lastTaxon)}`);
+}
+function suggest() {  // before anything is typed: last name, the frames' names, their logs, recent names (stars have their own row)
+  const P = picks(), have = one(P) ? key(P[0].l.taxon) : null, out = [], seen = new Set([have, ...(me ? me.favs : []).map(key)]);
+  const add = (t, why) => { if (t && !seen.has(key(t))) { seen.add(key(t)); out.push({ t, why }); } };
+  if (P[0] && P[0].l.was === null) add(lastTaxon, 'last used');
+  for (const f of framesOf(P).slice(0, 6)) {
+    (f.logs || []).forEach(x => add(x.taxon, logsName ? logsName + ' log' : 'log'));
+    (f.names || []).forEach(t => add(t, 'in this clip'));
+    if (mode === 'frame') live(f).forEach(l => add(l.taxon, 'in this frame'));
+  }
+  recent.forEach(t => add(t, 'recent'));
+  return out.slice(0, 6);
+}
+function local(s) {
+  const w = s.toLowerCase(), out = [], more = new Map();
+  for (const id of order) for (const l of frames.get(id).labels) if (l.taxon && !l.removed && !byId.has(l.taxon.id)) more.set(key(l.taxon), { ...l.taxon, common: [], aka: [], src: ['used'] });
+  for (const t of [...taxa, ...more.values()]) {
+    const n = t.name.toLowerCase(), alts = [...t.common, ...t.aka].map(x => x.toLowerCase());
+    let score = n === w ? 0 : n.startsWith(w) ? 1 : alts.some(x => x === w) ? 1 : alts.some(x => x.startsWith(w)) ? 2 : n.includes(' ' + w) || alts.some(x => x.includes(' ' + w)) ? 3 : n.includes(w) || alts.some(x => x.includes(w)) ? 4 : 9;
+    // names someone listed for the site (src "list"; "deck" in older lists) come a little before the rest
+    if (score < 9) out.push({ t, score: score + (t.src.includes('list') || t.src.includes('deck') ? -0.5 : 0), why: t.src[0] === 'used' ? 'used here' : 'in the name list' });
+  }
+  return out.sort((a, b) => a.score - b.score || a.t.name.localeCompare(b.t.name)).slice(0, 7);
+}
+function search(text) {
+  const s = text.trim(); ask++; clearTimeout(searchTimer);
+  if (!s) { const P = picks(); hits = suggest(); hi = P[0] && P[0].l.was === null && !P[0].l.taxon && hits.length ? 0 : -1; return showHits(''); }
+  hits = local(s); hi = 0; showHits(s, s.length >= 3 ? 'Searching WoRMS' : 'Type one more letter to search WoRMS');
+  if (s.length < 3) return;
+  const mine = ask; searchTimer = setTimeout(() => worms(s, mine), 300);
+}
+async function worms(s, mine) {
+  const R = 'https://www.marinespecies.org/rest/', j = u => fetch(R + u).then(r => r.status === 200 ? r.json() : []);
+  let sc = [], ve = [], failed = 0;
+  const e = encodeURIComponent(s);
+  [sc, ve] = await Promise.all([j(`AphiaRecordsByName/${e}?like=true&marine_only=true&extant_only=true&offset=1`).catch(() => (failed++, [])),
+    j(`AphiaRecordsByVernacular/${e}?like=true&offset=1`).catch(() => (failed++, []))]);
+  if (mine !== ask) return;
+  const ids = new Set(hits.map(h => h.t.id)), add = [];
+  for (const r of [...sc, ...ve]) {
+    if (!r || r.kingdom !== 'Animalia' || !r.valid_AphiaID || r.isExtinct || ids.has(r.valid_AphiaID)) continue;
+    ids.add(r.valid_AphiaID);
+    const syn = r.valid_AphiaID !== r.AphiaID;
+    add.push({ t: { id: r.valid_AphiaID, name: r.valid_name || r.scientificname, rank: r.rank || '', up: [r.phylum, r.class, r.order, r.family].filter(Boolean), common: [], aka: syn ? [r.scientificname] : [] }, why: 'WoRMS' });
+  }
+  // Current names before old ones, higher ranks before species, then the shortest.
+  const w = s.toLowerCase(), old = h => h.t.name.toLowerCase().startsWith(w) ? 0 : h.t.aka.some(a => a.toLowerCase().startsWith(w)) ? 1 : 2, sp = h => /species/i.test(h.t.rank) ? 1 : 0;
+  add.sort((a, b) => old(a) - old(b) || sp(a) - sp(b) || a.t.name.length - b.t.name.length);
+  hits = [...hits, ...add].slice(0, 12);
+  if (hi >= hits.length || hi < 0) hi = hits.length ? 0 : -1;
+  showHits(s, failed === 2 ? 'WoRMS did not answer; these are the names of the name list and of this review' : '');
+}
+function showHits(s, foot) {
+  const H = $('hits'); if (!H) return;
+  H.replaceChildren();
+  const row = (t, html) => {
+    const d = document.createElement('div'), b = document.createElement('button'), k = H.children.length;
+    d.className = 'hit' + (k === hi ? ' on' : ''); b.type = 'button'; b.className = 'pick'; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', k === hi);
+    b.innerHTML = html; b.onclick = () => name(t); d.append(b); H.append(d);
+    d.onmousemove = () => { if (hi !== k) { hi = k; mark(); } };
+    return d;
+  };
+  hits.forEach(h => {
+    const t = h.t, full = byId.get(t.id) || t;
+    const sub = [full.common && full.common.slice(0, 2).join(', '), full.aka && full.aka.length && s && full.aka.find(a => a.toLowerCase().includes(s.toLowerCase())) ? 'formerly ' + full.aka.find(a => a.toLowerCase().includes(s.toLowerCase())) : '', t.rank, full.up && full.up.slice(-1)[0]].filter(Boolean).join(' · ');
+    row(t, `<span>${sci(t)}</span><span class="why">${esc(h.why || '')}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ''}`).append(starBtn(t));
+  });
+  if (s && !foot) {
+    const t = { id: null, name: s, rank: '' };
+    hits.push({ t, why: 'typed' }); if (hits.length === 1) hi = 0;
+    row(t, `<span>Keep “${esc(s)}” as typed</span><span class="why">no WoRMS ID</span>`);
+  }
+  if (foot) { const d = document.createElement('div'); d.className = 'none'; d.textContent = foot; H.append(d); }
+  placePop();
+}
+function mark(scroll) { [...$('hits').querySelectorAll('.hit')].forEach((x, i) => { x.classList.toggle('on', i === hi); x.firstChild.setAttribute('aria-selected', i === hi); if (scroll && i === hi) x.scrollIntoView({ block: 'nearest' }); }); }
+function popKeys(e) {
+  const empty = !$('q').value, fav = empty && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key) && me && me.favs[e.key - 1];
+  e.stopPropagation();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (hits.length) { hi = (hi + (e.key === 'ArrowDown' ? 1 : -1) + hits.length) % hits.length; mark(true); } }
+  else if (walk && empty && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); go(walk.k + (e.key === 'ArrowLeft' ? -1 : 1)); }
+  else if (fav) { e.preventDefault(); name(fav); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (hi >= 0 && hits[hi]) name(hits[hi].t); else if (walk || mode === 'tiles') right(); else deselect(); }
+  else if (e.key === 'Escape') {
+    e.preventDefault();
+    if (!empty) { $('q').value = ''; typed = false; search(''); }
+    else if (mode === 'tiles') clearTiles(); else if (walk) stopWalk();
+    else if (adding && sel.size === 1 && picks()[0] && picks()[0].l.was === null && !picks()[0].l.taxon) remove(); else deselect();
+  }
+  else if (e.key === 'Tab' && mode === 'frame') { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
+  else if (empty && (e.key === 'Delete' || (e.key === 'Backspace' && !typed)) && !e.repeat) { e.preventDefault(); remove(); }  // never the Backspace that is clearing a typed name
+  else if ((e.metaKey || e.ctrlKey) && e.key === 'z' && empty) { e.preventDefault(); doUndo(); }
+}
+function cycle(d) { if (walk) return go(walk.k + d); const L = walkOrder(cur); if (!L.length) return; const k = L.findIndex(l => sel.has(l.id)); startWalk(k < 0 ? undefined : L[(k + d + L.length) % L.length].id); }
+
+/* ---- tiles: every animal of one name ---- */
+let tileKey = null, tileItems = [], tileEls = new Map(), tileSel = new Set(), tileFrom = null, lastTile = null, tileTop = [0, 0], tileOpen = false, tileScope = 'all', tileGroups = [];
+const grid = $('grid'), tileSize = Math.min(340, Math.max(96, +disk.get('tile') || 168));
+$('t-size').value = tileSize; grid.style.setProperty('--tile', tileSize + 'px');
+// Which names the tiles show: the one picked and, with "Include lower taxa", everything under it.
+let lower = disk.get('lower') === '1';
+const fits = t => tileKey === '*' || key(t) === tileKey || (lower && under(t, tileKey));
+const inTiles = (f, l) => keptL(f, l) && !(tileOpen && checked(f, l)) && (tileScope === 'all' || f === cur);
+const wanted = (f, l) => inTiles(f, l) && fits(l.taxon);
+function setMode(m) {
+  if (mode !== m) { mode = m; $('app').dataset.mode = m; $('tiles').hidden = m !== 'tiles'; $('cutview').hidden = m !== 'cut'; $('view').inert = $('film').inert = m !== 'frame'; }
+  $('b-frames').setAttribute('aria-pressed', m === 'frame'); $('b-tiles').setAttribute('aria-pressed', m === 'tiles'); $('b-cut').setAttribute('aria-pressed', m === 'cut');
+  pane();
+}
+function showTiles(k) {  // a name's tiles, from the top
+  const P = mode === 'frame' ? picks() : [];
+  if (k === undefined) k = one(P) ? key(P[0].l.taxon) : tileKey !== null ? tileKey : (live()[0] ? key(live()[0].taxon) : '*');
+  leaveWalk(); setArm(null); setAdd(false); stopVideo(); sel.clear(); closePop(); hush();
+  const push = mode !== 'tiles';
+  setMode('tiles');
+  history[push ? 'pushState' : 'replaceState'](null, '', '#tiles/' + encodeURIComponent(k));
+  tileKey = k; lastTile = null; buildTiles(); grid.scrollTop = 0; tileList();
+}
+function buildTiles() {
+  tileSel.clear(); tileFrom = null; closePop(); tileItems = []; tileEls.clear(); tileGroups = [];
+  const groups = new Map(), path = t => [...(lineOf(t) || []).map(i => (taxonOf(i) || {}).name || ''), t.name];
+  for (const id of order) {
+    const f = frames.get(id);
+    live(f).filter(l => wanted(f, l)).sort((a, b) => a.box[0] - b.box[0]).forEach(l => {
+      const g = tileKey === '*' ? '*' : key(l.taxon);
+      if (!groups.has(g)) groups.set(g, { g, t: l.taxon, items: [] });
+      groups.get(g).items.push({ f: id, id: l.id, k: id + '/' + l.id, g });
+    });
+  }
+  // The name itself first, where it always is; then what lies under it, in the order of the classification.
+  const rows = [...groups.values()]; if (rows.length > 1) rows.forEach(r => r.p = path(r.t));
+  rows.sort((a, b) => (b.g === tileKey) - (a.g === tileKey) || cmp(a.p, b.p));
+  const out = document.createDocumentFragment();
+  for (const r of rows) {
+    const d = document.createElement('div'); d.className = 'tg';
+    if (r.g !== tileKey) {
+      const h = document.createElement('div'); h.className = 'th'; h.innerHTML = `<span class="nm">${heading(r.t)}</span> <span class="num"></span>`; out.append(h);
+      d.dataset.head = ''; tileGroups.push({ g: r.g, items: r.items, t: r.t, num: h.querySelector('.num') });
+    }
+    for (const it of r.items) { tileItems.push(it); const e = tileEl(it); tileEls.set(it.k, e); d.append(e); }
+    out.append(d);
+  }
+  grid.replaceChildren(out);
+  if (!tileItems.length) {
+    const n = lower ? 0 : moreBelow(), p = document.createElement('p'); p.className = 'none';
+    p.textContent = tileOpen ? 'Nothing left to check here. ' : `No animals with this name${lower ? ' or from its lower taxa' : ''}. `;
+    if (n) { const b = document.createElement('button'); b.className = 'btn'; b.textContent = `Show the ${n} from lower taxa`; b.onclick = () => setLower(true); p.append(b); }
+    grid.append(p);
+  }
+  retile();
+}
+const cmp = (a, b) => { for (let k = 0; a && b && k < Math.max(a.length, b.length); k++) { const c = (a[k] || '').localeCompare(b[k] || ''); if (c) return c; } return 0; };
+// A lower name with what lies between it and the name picked: Perciformes, Sebastidae, Sebastes.
+function heading(t) {
+  const L = lineOf(t) || [], at = L.indexOf(idIn(tileKey)), c = common(t);
+  const way = L.slice(at + 1).map(taxonOf).filter(x => x && ['Phylum', 'Class', 'Order', 'Family', 'Genus'].includes(x.rank) && !(x.rank === 'Genus' && t.name.startsWith(x.name + ' ')));
+  return `${way.length ? `<span class="path">${way.map(sci).join(' › ')} › </span>` : ''}${sci(t)}${c ? ` <span class="path">${esc(c)}</span>` : ''}`;
+}
+function moreBelow() { let n = 0; for (const id of order) { const f = frames.get(id); for (const l of f.labels) if (inTiles(f, l) && under(l.taxon, tileKey)) n++; } return n; }
+function setLower(on) {
+  lower = on; $('t-lower').checked = on; disk.set('lower', on ? '1' : '0');
+  if (mode !== 'tiles') return;
+  const top = grid.scrollTop; buildTiles(); grid.scrollTop = top;
+}
+// The square around an animal (build.py's rule) and the picture for it: the ready-made one while the box is still inside it.
+function cropOf(f, l) {
+  const c = l.crop, b = l.box;
+  if (c && b[0] >= c[0] && b[1] >= c[1] && b[2] <= c[0] + c[2] && b[3] <= c[1] + c[2]) return { c, src: `/crop/${f.id}/${l.id}.jpg?${built}` };
+  const s = Math.round(Math.min(Math.max(1.7 * Math.max(b[2] - b[0], b[3] - b[1]), 72), Math.max(f.w, f.h)));
+  const at = (lo, hi, n) => Math.round(s >= n ? (n - s) / 2 : Math.min(Math.max((lo + hi - s) / 2, 0), n - s));
+  return { c: [at(b[0], b[2], f.w), at(b[1], b[3], f.h), s], src: null };
+}
+function tileEl(it) {
+  const d = document.createElement('div');
+  d.className = 'tile'; d.dataset.k = it.k; d.tabIndex = 0; d.setAttribute('role', 'button');
+  d.innerHTML = '<div class="pic"></div><button class="sq" role="checkbox" tabindex="-1" aria-label="Select">✓</button><span class="st"></span><div class="cap"></div>';
+  return d;
+}
+function paintTile(it) {
+  const d = tileEls.get(it.k), f = frames.get(it.f), l = f && f.labels.find(x => x.id === it.id); if (!d || !l) return;
+  const out = !keptL(f, l) || !fits(l.taxon), moved = !out && it.g !== '*' && key(l.taxon) !== it.g, c = l.box.join() + masked(l);
+  if (d.dataset.c !== c) {
+    d.dataset.c = c;
+    const { c: [x, y, s], src } = cropOf(f, l), b = l.box;
+    d.querySelector('.pic').innerHTML = `${src ? `<img loading="lazy" draggable="false" src="${src}" alt="">` : ''}<svg viewBox="${x} ${y} ${s} ${s}">${src ? '' : `<image href="/img/${f.id}.jpg?${built}" width="${f.w}" height="${f.h}"/>`}${['under', 'line'].map(k => masked(l) ? `<path class="${k}" d="${outline(l)}"/>` : `<rect class="${k}" x="${b[0]}" y="${b[1]}" width="${b[2] - b[0]}" height="${b[3] - b[1]}"/>`).join('')}</svg>`;
+  }
+  d.className = 'tile' + (out ? ' out' : moved ? ' moved' : '') + (tileSel.has(it.k) ? ' sel' : '') + (lastTile === it.k ? ' last' : '');
+  d.querySelector('.sq').setAttribute('aria-checked', tileSel.has(it.k));
+  const st = (l.unsure ? '<span title="Not sure of the name">?</span>' : '') + (l.note ? `<span title="${esc(l.note)}">note</span>` : '') + (checked(f, l) && !l.removed ? '<span class="ok" title="Checked">✓</span>' : '');
+  const S = d.querySelector('.st'); if (S.innerHTML !== st) S.innerHTML = st;
+  d.querySelector('.cap').innerHTML = l.removed ? 'removed' : belowCut(f, l) ? 'under the cut' : out || moved ? 'now ' + (l.taxon ? sci(l.taxon) : 'without a name') : tileKey === '*' || allNames ? sci(l.taxon) : '';
+  d.title = `${l.taxon ? l.taxon.name : 'Needs a name'} · frame ${f.id} · ${f.time}${f.depth != null ? ` · ${Math.round(f.depth)} m` : ''}${l.by ? ' · last changed by ' + l.by : ''}`;
+  d.setAttribute('aria-label', d.title);
+}
+function retile() {  // bring the tiles up to date where they are; none move until the name is picked again
+  if (tileKey === null || mode !== 'tiles') return;
+  tileItems.forEach(paintTile); grid.classList.toggle('picking', tileSel.size > 0); grid.classList.toggle('lit', lit); grid.classList.toggle('bare', hidden);
+  const L = tileItems.map(i => [frames.get(i.f), labelOf(i.f, i.id), i]).filter(x => x[1] && fits(x[1].taxon)), have = new Set(tileItems.map(i => i.k));
+  let moved = 0;
+  for (const id of order) { const f = frames.get(id); for (const l of f.labels) if (wanted(f, l) && !have.has(id + '/' + l.id)) moved++; }
+  const gone = tileItems.length - L.length, other = tileKey === '*' ? 0 : L.filter(x => key(x[1].taxon) !== x[2].g).length;
+  $('t-update').classList.toggle('none', !(moved + gone + other)); $('t-update').textContent = `Update: ${[gone ? gone + ' out' : '', moved ? moved + ' in' : '', other ? other + ' renamed' : ''].filter(Boolean).join(', ')}`;
+  for (const g of tileGroups) { const n = g.items.filter(i => { const l = labelOf(i.f, i.id); return l && key(l.taxon) === g.g; }).length; const x = '· ' + plural(n, 'animal'); if (g.num.textContent !== x) g.num.textContent = x; }
+  const flat = tileKey === '*' || tileKey === '', T = flat ? null : tileTaxon(), c = flat ? '' : common(T);
+  $('t-name').innerHTML = tileKey === '*' ? 'All names' : tileKey === '' ? 'Needs a name' : sci(T);
+  const exact = flat || !lower ? L.length : L.filter(x => key(x[1].taxon) === tileKey).length, below = flat ? 0 : lower ? L.length - exact : moreBelow();
+  $('t-sub').textContent = `${c ? c + ' · ' : ''}${plural(L.length, 'animal')}${lower && below ? ` (${exact ? below : 'all'} from lower taxa)` : ''} in ${plural(new Set(L.map(x => x[0].id)).size, 'frame')} · ${L.filter(x => checked(...x)).length} checked${!lower && below ? ` · ${below} more in lower taxa` : ''}${lower && !flat && unplaced.size ? ` · ${plural(unplaced.size, 'name')} not placed: WoRMS did not answer` : ''}`;
+  $('t-sub').title = $('t-sub').textContent;
+  $('t-lower').disabled = flat; $('t-lower-l').classList.toggle('off', flat);
+  $('t-ok').disabled = !L.some(x => !checked(...x)); $('t-all').textContent = tileSel.size ? 'Select none' : 'Select all';
+  $('t-scope').options[1].textContent = `Frame ${cur.id}`;
+  tileList(); learn();
+}
+function tileTaxon() {  // what the tiles' name is: in the list, in a line, on a label or starred
+  const id = idIn(tileKey), name = tileKey.split('|')[1];
+  if (id && taxonOf(id)) return taxonOf(id);
+  for (const f of frames.values()) for (const l of f.labels) if (l.taxon && key(l.taxon) === tileKey) return l.taxon;
+  return (me && me.favs.find(t => key(t) === tileKey)) || { id: id || null, name, rank: '' };
+}
+function tileList() {
+  if (mode !== 'tiles' || $('a-tiles').hidden) return;
+  const groups = new Map(), all = { t: null, n: 0, ok: 0 }, w = $('tq').value.trim().toLowerCase();
+  for (const id of order) { const f = frames.get(id); if (tileScope !== 'all' && f !== cur) continue; for (const l of live(f)) { const k = key(l.taxon); if (!groups.has(k)) groups.set(k, { k, t: l.taxon, n: 0, ok: 0 }); for (const g of [groups.get(k), all]) { g.n++; if (checked(f, l)) g.ok++; } } }
+  if (me) me.favs.forEach(t => { if (!groups.has(key(t))) groups.set(key(t), { k: key(t), t, n: 0, ok: 0 }); });
+  const used = [...groups.values()].filter(g => g.n && g.t), sum = (g, k) => { for (const u of used) if (under(u.t, k)) { g.n2 += u.n; g.ok2 += u.ok; } return g; };
+  for (const g of groups.values()) { g.n2 = g.n; g.ok2 = g.ok; if (lower && g.t) sum(g, g.k); }
+  const rows = [...groups.values()].filter(g => !w || (g.t ? g.t.name + ' ' + common(g.t) + ' ' + ((byId.get(g.t.id) || {}).aka || []).join(' ') : 'needs a name unnamed').toLowerCase().includes(w));
+  rows.sort((a, b) => starred(b.t) - starred(a.t) || !!a.t - !!b.t || b.n - a.n);
+  const box = $('tlist'), top = box.scrollTop; box.replaceChildren();
+  if (!w) box.append(taxonRow(all, { all: true, part: true, on: tileKey === '*', use: () => showTiles('*') }));
+  for (const g of rows) box.append(taxonRow({ t: g.t, n: g.n2, ok: g.ok2 }, { part: true, on: tileKey === g.k, use: () => showTiles(g.k) }));
+  // Higher taxa no animal has as its own name, found by typing: picking one shows what lies under it.
+  const up = new Map();
+  if (w) for (const u of used) for (const id of lineOf(u.t) || []) { const t = taxonOf(id); if (t && !groups.has(key(t)) && !up.has(id) && (t.name + ' ' + common(t)).toLowerCase().includes(w)) up.set(id, sum({ t, k: key(t), n2: 0, ok2: 0 }, key(t))); }
+  for (const g of [...up.values()].sort((a, b) => a.t.name.localeCompare(b.t.name)).slice(0, 12))
+    box.append(taxonRow({ t: g.t, n: g.n2, ok: g.ok2 }, { part: true, on: tileKey === g.k, sub: [(g.t.rank || '').toLowerCase(), common(g.t)].filter(Boolean).join(' · '), title: 'No animal has exactly this name; this shows its lower taxa', use: () => { if (!lower) setLower(true); showTiles(g.k); } }));
+  if (w && !rows.length && !up.size) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'No animal here has that name.'; box.append(p); }
+  box.scrollTop = top;
+}
+function pick(k, range, toggle) {
+  if (range && tileFrom) {
+    const a = tileItems.findIndex(i => i.k === tileFrom), b = tileItems.findIndex(i => i.k === k);
+    tileItems.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(i => { if (labelOf(i.f, i.id)) tileSel.add(i.k); });
+  } else if (tileSel.has(k)) tileSel.delete(k); else tileSel.add(k);
+  tileFrom = k; picked();
+}
+function picked() { if (tileSel.size) openPop(); else closePop(); retile(); }
+function clearTiles() { tileSel.clear(); picked(); }
+grid.addEventListener('click', e => {
+  const d = e.target.closest('.tile'); if (!d) return;
+  if (e.target.closest('.sq') || e.shiftKey || e.metaKey || e.ctrlKey) return pick(d.dataset.k, e.shiftKey);
+  openTile(d.dataset.k);
+});
+grid.addEventListener('mousedown', e => { if (e.shiftKey) e.preventDefault(); });  // no text selection on a range
+grid.addEventListener('keydown', e => {
+  const d = e.target.closest('.tile'); if (!d || e.target !== d) return;
+  const k = tileItems.findIndex(i => i.k === d.dataset.k);
+  const to = { ArrowLeft: k - 1, ArrowRight: k + 1, ArrowUp: nextRow(k, -1), ArrowDown: nextRow(k, 1) }[e.key];
+  if (to !== undefined) { e.preventDefault(); e.stopPropagation(); const n = tileItems[to]; if (n) tileEls.get(n.k).focus(); }
+  else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); openTile(d.dataset.k); }
+  else if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); pick(d.dataset.k, e.shiftKey); }
+});
+function nextRow(k, d) {  // the tile above or below, also from one name's tiles to the next
+  const at = i => tileEls.get(tileItems[i].k).getBoundingClientRect(), r = at(k);
+  let i = k + d; while (tileItems[i] && Math.abs(at(i).top - r.top) < 4) i += d;
+  if (!tileItems[i]) return k;
+  const top = at(i).top; let best = i;
+  for (; tileItems[i] && Math.abs(at(i).top - top) < 4; i += d) if (Math.abs(at(i).left - r.left) < Math.abs(at(best).left - r.left)) best = i;
+  return best;
+}
+function openTile(k) {  // its frame, zoomed in on it, with its name box; Enter goes on through the tiles
+  const items = tileItems.filter(i => labelOf(i.f, i.id)), at = items.findIndex(i => i.k === k);
+  if (at < 0) return say('That label was removed.');
+  tileSel.clear(); closePop(); tileTop = [grid.scrollTop, scrollY];
+  walk = { kind: 'tiles', items, k: -1, end: false };
+  history.pushState(null, '', '#' + items[at].f);
+  setMode('frame'); go(at); scrollTo(0, 0);
+}
+function backToTiles() {  // to the same place, with the tile last looked at marked
+  const it = walk && walk.items[walk.k];
+  if (it) lastTile = it.k;
+  walk = null; sel.clear(); stopVideo(); closePop(); setMode('tiles');
+  history.replaceState(null, '', '#tiles/' + encodeURIComponent(tileKey));
+  retile(); grid.scrollTop = tileTop[0]; scrollTo(0, tileTop[1]);
+  const d = it && tileEls.get(it.k); if (d) { d.scrollIntoView({ block: 'nearest' }); d.focus({ preventScroll: true }); }
+}
+$('b-tiles').onclick = () => { if (mode === 'tiles') return; walk && walk.kind === 'tiles' ? backToTiles() : showTiles(); };
+$('b-frames').onclick = () => { if (mode === 'frame') return; clearTiles(); setMode('frame'); history.pushState(null, '', '#' + cur.id); open(cur.id); };
+$('t-update').onclick = () => { const top = grid.scrollTop; buildTiles(); grid.scrollTop = top; };
+$('t-lower').checked = lower; $('t-lower').onchange = e => setLower(e.target.checked);
+$('t-open').onchange = e => { tileOpen = e.target.checked; buildTiles(); };
+$('t-scope').onchange = e => { tileScope = e.target.value; buildTiles(); };
+$('t-size').oninput = e => { grid.style.setProperty('--tile', e.target.value + 'px'); disk.set('tile', e.target.value); };
+$('t-all').onclick = () => { tileSel = new Set(tileSel.size ? [] : tileItems.filter(i => { const l = labelOf(i.f, i.id); return l && fits(l.taxon); }).map(i => i.k)); picked(); };
+$('t-ok').onclick = () => {
+  const P = tileItems.map(i => ({ f: frames.get(i.f), l: labelOf(i.f, i.id) })).filter(p => p.l && !checked(p.f, p.l) && fits(p.l.taxon));
+  P.forEach(p => p.l.ok = true); tileSel.clear(); closePop(); commit(framesOf(P)); say(`${plural(P.length, 'animal')} marked right`, 'Undo', doUndo);
+};
+$('tq').oninput = tileList;
+$('tq').onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') { e.target.value = ''; tileList(); e.target.blur(); } else if (e.key === 'Enter') { const b = $('tlist').querySelector('.g'); if (b) b.click(); } };
+
+/* ---- the cut (when reviewers may move it): the scores of all labels, and the labels nearest the cut ---- */
+let galN = 12, galItems = [], galTop = 0, cutTimer = 0, cutPending = false, cutSending = null, histW = 600, histReady = false, recutTimer = 0;
+const HH = 150, HX0 = 8, HY0 = 20, HY1 = 124;
+const clampCut = v => Math.max(0, Math.min(100, Math.round(v)));
+function setupCut() {
+  const tune = cut !== null && cutMode === 'tune';
+  if (!tune && mode === 'cut') { setMode('frame'); if (cur) open(cur.id, true); }  // the server came back without a cut to move
+  $('b-cut').hidden = $('start-cut').hidden = !tune;
+  showRemoved = disk.get(tune ? 'rem-t' : 'rem') === null ? tune : disk.get(tune ? 'rem-t' : 'rem') === '1';
+  showDropped = tune && disk.get('drop') !== '0';
+  $('c-name').textContent = scoreName;
+  drawCutbox();
+}
+function drawCutbox() {  // the header: a chip when the cut is fixed, − cut + when it may move
+  const B = $('cutbox'); B.hidden = cut === null;
+  if (cut === null) return;
+  if (cutMode !== 'tune') {
+    B.innerHTML = `<span class="chip" title="Labels with a ${esc(scoreName)} under ${fmt(cut)} are not shown, unless a reviewer checked them. The cut was set when the review was started.">${esc(scoreName)} ≥ ${fmt(cut)}</span>`;
+    return;
+  }
+  if (!$('h-v')) {
+    B.innerHTML = '<button class="btn" id="h-m" aria-label="Lower the cut by 1" title="Lower the cut (J)">−</button><button class="btn val" id="h-v" title="The cut: show the scores of all labels (C)"></button><button class="btn" id="h-p" aria-label="Raise the cut by 1" title="Raise the cut (K)">+</button>';
+    $('h-m').onclick = () => nudge(-1); $('h-p').onclick = () => nudge(1); $('h-v').onclick = () => mode === 'cut' ? $('b-frames').click() : showCut();
+  }
+  $('h-v').textContent = `cut ${fmt(cut)}`;
+}
+function nudge(d) { if (cutMode === 'tune' && cut !== null) setCut(cut + d, true); }
+function setCut(v, send) {
+  if (cut === null || !isNum(v)) return;
+  v = clampCut(v); if (v === cut) return;
+  cut = v; drawCutbox();
+  if (send) { cutPending = true; clearTimeout(cutTimer); cutTimer = setTimeout(sendCut, 300); }
+  unsee(); refresh();
+  const it = walk && !walk.end && mode === 'frame' ? walk.items[walk.k] : null;
+  if (it && !(walk.kind === 'cut' ? anyLabel : labelOf)(it.f, it.id)) return go(walk.k);  // the label open in a walk went under the cut: on to the next
+  if (mode === 'frame' && !pop.hidden && picks().length && !typed) openPop();
+}
+async function sendCut() {  // the cut, once a slider drag or a run of key presses settles
+  clearTimeout(cutTimer);
+  if (!cutPending) return;
+  if (!me) return profile();
+  const c = cut; cutPending = false;
+  try { cutSending = post('/api/cut', { uid: me.uid, session, cut: c }); await cutSending; cutSending = null; }
+  catch (e) {
+    cutSending = null;
+    if (e.status === 401) return signedOut();
+    if (e.status === 400 || e.status === 403) { load(await get('/api/all')); setupCut(); refresh(); return say('The cut was not saved: ' + esc(e.message) + '.'); }
+    if (cut === c) { cutPending = true; cutTimer = setTimeout(sendCut, 4000); }
+    status('Cut not saved', true);
+  }
+}
+function recut() {
+  if (mode !== 'cut') return;
+  drawHist(); showReadout();
+  clearTimeout(recutTimer); recutTimer = setTimeout(() => { byNames(); gallery(); }, 40);
+}
+function showCut() {
+  if (cutMode !== 'tune' || cut === null) return;
+  leaveWalk(); setArm(null); setAdd(false); stopVideo(); sel.clear(); closePop(); hush();
+  const push = mode !== 'cut';
+  setMode('cut');
+  history[push ? 'pushState' : 'replaceState'](null, '', '#cut');
+  buildHist(); drawHist(); showReadout(); byNames(); gallery(); $('gal').scrollTop = 0;
+}
+function backToCut() {  // to the same place, with the tile last looked at marked
+  const it = walk && walk.items[walk.k];
+  walk = null; sel.clear(); stopVideo(); closePop(); setMode('cut');
+  history.replaceState(null, '', '#cut');
+  buildHist(); drawHist(); showReadout(); byNames(); gallery(it ? it.k : null); $('gal').scrollTop = galTop;
+}
+function bins() {  // per score 0..100: [not reviewed, checked by a reviewer, removed by a reviewer]
+  const B = Array.from({ length: 101 }, () => [0, 0, 0]);
+  for (const id of order) {
+    const f = frames.get(id);
+    for (const l of f.labels) {
+      if (!scored(l) || l.was === null) continue;
+      const b = B[Math.max(0, Math.min(100, Math.floor(l.s)))];
+      if (l.removed) b[2]++; else if (checked(f, l)) b[1]++; else b[0]++;
+    }
+  }
+  return B;
+}
+const hx = v => HX0 + (histW - 2 * HX0) * v / 101;  // bar v covers scores [v, v + 1): a whole-number cut falls between bars
+function buildHist() {
+  const svg = $('hist');
+  histW = Math.max(240, Math.round(svg.getBoundingClientRect().width) || 600);
+  svg.setAttribute('viewBox', `0 0 ${histW} ${HH}`);
+  if (histReady) return;
+  histReady = true;
+  const at = e => { const r = svg.getBoundingClientRect(); return clampCut(((e.clientX - r.left) / r.width * histW - HX0) / (histW - 2 * HX0) * 101); };
+  let down = false;
+  svg.addEventListener('pointerdown', e => { down = true; svg.setPointerCapture(e.pointerId); setCut(at(e), true); });
+  svg.addEventListener('pointermove', e => {
+    if (down) return setCut(at(e), true);
+    const r = svg.getBoundingClientRect(), v = Math.min(100, Math.max(0, Math.floor(((e.clientX - r.left) / r.width * histW - HX0) / (histW - 2 * HX0) * 101))), b = bins()[v], tip = $('htip');
+    tip.hidden = false; tip.style.left = `${Math.max(70, Math.min(r.width - 70, e.clientX - r.left))}px`;
+    tip.textContent = `${scoreName} ${v}: ${plural(b[0] + b[1] + b[2], 'label')}` + (b[1] ? `, ${b[1]} checked` : '') + (b[2] ? `, ${b[2]} removed` : '');
+  });
+  const up = () => { down = false; };
+  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  svg.addEventListener('pointerleave', () => { $('htip').hidden = true; });
+  new ResizeObserver(() => { if (mode === 'cut' && Math.round(svg.getBoundingClientRect().width) !== histW) { buildHist(); drawHist(); } }).observe(svg);
+}
+function drawHist() {
+  if (!histReady || cut === null) return;
+  const B = bins(), X1 = histW - HX0, bw = (X1 - HX0) / 101, top = Math.max(1, ...B.map(b => b[0] + b[1] + b[2]));
+  let s = `<line class="axis" x1="${HX0}" y1="${HY1 + .5}" x2="${X1}" y2="${HY1 + .5}"/>`;
+  B.forEach(([u, ok, x], v) => {
+    const n = u + ok + x; if (!n) return;
+    const h = Math.max(2, (HY1 - HY0) * n / top), X = (hx(v) + .4).toFixed(2), w = Math.max(0.6, bw - .8).toFixed(2);
+    let y = HY1;
+    for (const [c, cls] of [[u, v >= cut ? 'b-k' : 'b-d'], [ok, 'b-ok'], [x, 'b-x']]) {
+      if (!c) continue;
+      const hh = h * c / n; y -= hh;
+      s += `<rect class="${cls}" x="${X}" y="${y.toFixed(2)}" width="${w}" height="${hh.toFixed(2)}" rx="1"/>`;
+    }
+  });
+  for (const v of [0, 20, 40, 60, 80, 100]) s += `<text class="tick" x="${(hx(v) + bw / 2).toFixed(1)}" y="${HY1 + 14}" text-anchor="middle">${v}</text>`;
+  const x = hx(cut).toFixed(1);
+  s += `<line class="cutline" x1="${x}" x2="${x}" y1="${HY0 - 6}" y2="${HY1}"/><path class="hand" d="M${x - 5} ${HY0 - 13}H${+x + 5}L${x} ${HY0 - 6}Z"/>`;
+  if (x - HX0 > 96) s += `<text class="side side-d" x="${x - 10}" y="${HY0 - 7}" text-anchor="end">under the cut</text>`;
+  if (X1 - x > 44) s += `<text class="side side-k" x="${+x + 10}" y="${HY0 - 7}">kept</text>`;
+  $('hist').innerHTML = s;
+}
+function showReadout() {
+  let n = 0, kept = 0, hand = 0, below = 0, rem = 0, none = 0, k0 = 0;
+  for (const id of order) {
+    const f = frames.get(id);
+    for (const l of f.labels) {
+      if (l.removed && l.was === null) continue;
+      n++;
+      if (l.removed) { rem++; continue; }
+      const byHand = l.was === null || checked(f, l);
+      if (!scored(l)) none++;
+      if (keptL(f, l)) { kept++; if (byHand) hand++; } else below++;
+      if (byHand || !scored(l) || cut0 === null || l.s >= cut0) k0++;
+    }
+  }
+  const rows = [['kept', `<b>${kept}</b> of ${plural(n, 'label')} (${n ? Math.round(1000 * kept / n) / 10 : 0}%)`], ['· by the score', kept - hand], ['· checked or added by a reviewer', hand], ['under the cut', below]];
+  if (rem) rows.push(['removed by a reviewer', rem, 'x']);
+  if (none) rows.push(['without a score (kept)', none]);
+  if (cut0 !== null && cut !== cut0) { const d = kept - k0; rows.push([`against the cut of ${fmt(cut0)}`, d === 0 ? 'the same labels' : `${Math.abs(d)} ${d > 0 ? 'more' : 'fewer'} kept`]); }
+  $('readout').innerHTML = rows.map(([a, b, c]) => `<dt>${a}</dt><dd${c ? ` class="${c}"` : ''}>${b}</dd>`).join('');
+  $('c-val').textContent = fmt(cut); $('cut-range').value = cut;
+  $('c-back').hidden = cut0 === null; $('c-back').textContent = `Back to ${fmt(cut0)}`; $('c-back').disabled = cut === cut0;
+  $('c-rule').textContent = cut === 0 ? 'A cut of 0 keeps every label that was not removed.' : `Labels scored ${fmt(cut)} or more are kept, and so is every label a reviewer checked or added. The others are dropped.`;
+}
+function byNames() {  // kept, under the cut and removed per name, over all frames: which kinds of animal a cut costs
+  const m = new Map();
+  for (const id of order) {
+    const f = frames.get(id);
+    for (const l of f.labels) {
+      if (l.removed && l.was === null) continue;
+      const k = key(l.taxon), r = m.get(k) || { t: l.taxon, n: [0, 0, 0] };
+      r.n[l.removed ? 2 : keptL(f, l) ? 0 : 1]++; m.set(k, r);
+    }
+  }
+  const rows = [...m.values()].sort((a, b) => b.n[0] + b.n[1] + b.n[2] - (a.n[0] + a.n[1] + a.n[2]));
+  $('bynames').innerHTML = '<thead><tr><th>name</th><th class="n">kept</th><th class="n">under</th><th class="n">removed</th></tr></thead><tbody>'
+    + rows.map(r => `<tr><td>${sci(r.t)}</td><td class="n">${r.n[0]}</td><td class="n">${r.n[1]}</td><td class="n">${r.n[2]}</td></tr>`).join('') + '</tbody>';
+}
+function gallery(mark) {  // the labels scored just under the cut and at or just over it, side by side
+  const all = [];
+  for (const id of order) { const f = frames.get(id); for (const l of f.labels) if (scored(l) && l.was !== null && (!l.removed || showRemoved)) all.push({ f: id, id: l.id, s: l.s, k: id + '/' + l.id }); }
+  all.sort((a, b) => a.s - b.s || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+  let lo = 0, hi = all.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (all[m].s >= cut) hi = m; else lo = m + 1; }
+  const under = all.slice(Math.max(0, lo - galN), lo).reverse(), over = all.slice(lo, lo + galN);
+  galItems = [...under, ...over];
+  const col = (head, sub, items, none) => `<div><h3>${head} <span>${sub}</span></h3>${items.length ? `<div class="tg">${items.map(galTile).join('')}</div>` : `<p class="none">${none}</p>`}</div>`;
+  const G = $('gal'), top = G.scrollTop;
+  G.innerHTML = col('Just under the cut', under.length ? `· the ${under.length} nearest under ${fmt(cut)}, of ${lo}` : '', under, `No label is scored under ${fmt(cut)}.`)
+    + col('At or just over the cut', over.length ? `· the ${over.length} nearest at or over ${fmt(cut)}, of ${all.length - lo}` : '', over, `No label is scored ${fmt(cut)} or more.`)
+    + (lo > galN || all.length - lo > galN ? '<button class="btn more" id="g-more">Show more</button>' : '');
+  G.scrollTop = top;
+  if ($('g-more')) $('g-more').onclick = () => { galN = Math.min(galN * 2, 480); gallery(); };
+  if (mark) { const d = [...G.querySelectorAll('.tile')].find(x => x.dataset.k === mark); if (d) { d.classList.add('last'); d.scrollIntoView({ block: 'nearest' }); d.focus({ preventScroll: true }); } }
+}
+function galTile(it) {
+  const f = frames.get(it.f), l = f.labels.find(x => x.id === it.id), { c: [x, y, s], src } = cropOf(f, l), b = l.box;
+  const low = belowCut(f, l), hand = !l.removed && checked(f, l), k = actionOf(f, l);
+  const shape = ['under', 'line'].map(c => masked(l) ? `<path class="${c}" d="${outline(l)}"/>` : `<rect class="${c}" x="${b[0]}" y="${b[1]}" width="${b[2] - b[0]}" height="${b[3] - b[1]}"/>`).join('');
+  const tip = [`${l.taxon ? l.taxon.name : 'Needs a name'}`, `${scoreName} ${fmt(l.s)}`, l.removed ? 'removed' : low ? 'under the cut' : hand ? 'checked' : 'kept by the score', l.why || '', `frame ${f.id}`].filter(Boolean).join(' · ');
+  return `<div class="tile${l.removed ? ' rem' : low ? ' drop' : ''}${hand ? ' hand' : ''}" data-k="${esc(it.k)}" tabindex="0" role="button" title="${esc(tip)}" aria-label="${esc(tip)}">`
+    + `<div class="pic">${src ? `<img loading="lazy" draggable="false" src="${src}" alt="">` : ''}<svg viewBox="${x} ${y} ${s} ${s}">${src ? '' : `<image href="/img/${f.id}.jpg?${built}" width="${f.w}" height="${f.h}"/>`}${shape}</svg></div>`
+    + `<span class="sc">${fmt(l.s)}${hand ? ' ✓' : ''}</span><button class="ga ${k}" tabindex="-1" title="${k === 'x' ? 'Remove it' : k === 'keep' ? 'Keep it, whatever the cut' : 'Put it back'}" aria-label="${k === 'x' ? 'Remove it' : k === 'keep' ? 'Keep it' : 'Put it back'}">${k === 'x' ? '✕' : k === 'keep' ? '✓' : '↺'}</button>`
+    + `${l.taxon ? `<div class="cap">${sci(l.taxon)}</div>` : ''}</div>`;
+}
+function openGal(k) {  // the label in its frame; Enter goes on through the tiles, Esc comes back
+  const items = galItems.filter(i => anyLabel(i.f, i.id)), at = items.findIndex(i => i.k === k);
+  if (at < 0) return;
+  galTop = $('gal').scrollTop; closePop();
+  walk = { kind: 'cut', items, k: -1, end: false };
+  history.pushState(null, '', '#' + items[at].f);
+  setMode('frame'); go(at); scrollTo(0, 0);
+}
+$('gal').addEventListener('click', e => {
+  const d = e.target.closest('.tile'); if (!d) return;
+  const [fr, id] = d.dataset.k.split('/'), f = frames.get(fr), l = f && f.labels.find(x => x.id === id); if (!l) return;
+  if (e.target.closest('.ga')) return flip(l, f);
+  openGal(d.dataset.k);
+});
+$('gal').addEventListener('keydown', e => {
+  const d = e.target.closest('.tile'); if (!d || e.target !== d) return;
+  if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); openGal(d.dataset.k); }
+  else if (e.key === 'x' || e.key === 'X') { e.preventDefault(); e.stopPropagation(); const [fr, id] = d.dataset.k.split('/'), f = frames.get(fr), l = f && f.labels.find(x => x.id === id); if (l) flip(l, f); }
+});
+$('cut-range').addEventListener('input', e => setCut(+e.target.value, true));
+$('c-m5').onclick = () => nudge(-5); $('c-m1').onclick = () => nudge(-1); $('c-p1').onclick = () => nudge(1); $('c-p5').onclick = () => nudge(5);
+$('c-back').onclick = () => { if (cut0 !== null) setCut(cut0, true); };
+$('b-cut').onclick = () => { if (mode === 'cut') return; walk && walk.kind === 'cut' ? backToCut() : showCut(); };
+
+/* ---- exports and decisions ---- */
+document.querySelectorAll('#export a[data-export]').forEach(a => a.addEventListener('click', async e => {
+  e.preventDefault(); $('export').open = false;
+  await flush(); await sendCut();
+  location.href = a.getAttribute('href');  // the server sends it as a download, so the page stays
+}));
+$('x-load').onclick = () => { $('export').open = false; $('x-file').click(); };
+$('x-file').onchange = async e => {
+  const file = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  if (!me) return profile();
+  let d; try { d = JSON.parse(await file.text()); } catch { return say(`${esc(file.name)} could not be read as JSON.`); }
+  await flush(); await sendCut();
+  try {
+    const r = await post('/api/decisions', { uid: me.uid, session, name: file.name, decisions: d });
+    load(await get('/api/all')); setupCut(); refresh(); if (mode === 'frame' && cur) open(cur.id, true);
+    say(`Loaded ${esc(file.name)}: ${plural(r.labels, 'label')} on ${plural(r.frames, 'frame')}${r.skipped ? `; ${r.skipped} matched no label here and ${r.skipped === 1 ? 'was' : 'were'} skipped` : ''}${isNum(r.cut) ? `; cut ${fmt(r.cut)}` : ''}${r.cut_ignored ? '; its cut was not used, as the cut here is fixed' : ''}.`, 'OK', () => {}, true);
+  } catch (err) { say('The decisions were not loaded: ' + esc(err.message)); }
+};
+
+/* ---- buttons and keys ---- */
+function setAdd(on) { if (on) { stopVideo(); if (walk && !walk.end) leaveWalk(); } adding = on; $('b-add').setAttribute('aria-pressed', on); stage.classList.toggle('add', on); if (on) { sel.clear(); closePop(); hidden = false; $('b-hide').setAttribute('aria-pressed', false); say(armed ? `Drag boxes: each is named ${sci(armed)}. Press Esc to stop adding.` : 'Drag a box around the animal. Press Esc to stop adding.'); } if (cur) draw(); }
+function setHide(on) { hidden = on; $('b-hide').setAttribute('aria-pressed', on); if (on && mode === 'frame' && !walk) deselect(); draw(); retile(); }
+/* The player: the whole clip the frame came from, with the labelled frame marked on its timeline. */
+const vid = $('vid'), SPEEDS = [1, 0.5, 0.25, 2]; let speed = 0, want = null, wasPlaying = false;
+const clock = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+function stopVideo() { if (!vid.hidden) { vid.pause(); vid.hidden = true; vid.classList.remove('on'); vid.removeAttribute('src'); vid.load(); want = null; $('b-vid').setAttribute('aria-pressed', false); if (cur) draw(); } }
+function closeVideo() { stopVideo(); if (walk && pop.hidden) walk.end ? walkEnd() : go(walk.k); }  // back to the animal that was up
+function video() {
+  if (!vid.hidden) return closeVideo();
+  if (!cur.video) return say('No video for this frame.');
+  setAdd(false); setArm(null); deselect(); speed = 0; $('p-speed').textContent = '1×';
+  vid.src = `/video/${cur.video}.mp4?${built}`; vid.hidden = false; $('b-vid').setAttribute('aria-pressed', true); draw(); bar();
+  vid.onloadedmetadata = () => { $('track').setAttribute('aria-valuemax', vid.duration.toFixed(1)); $('track').querySelector('.mark').style.left = 100 * cur.frame_at / vid.duration + '%'; toMark(); vid.addEventListener('seeked', () => { if (!vid.hidden) { vid.classList.add('on'); vid.play().catch(() => {}); } }, { once: true }); };
+  vid.onerror = () => { if (!vid.hidden && vid.error) { closeVideo(); say('The video did not load.'); } };
+}
+function toggle() { if (vid.paused) { if (vid.ended) seek(0); vid.play().catch(() => {}); } else vid.pause(); }
+function seek(t) {  // one seek at a time, so dragging stays smooth: the newest position wins
+  if (!vid.duration) return;
+  t = Math.min(Math.max(t, 0), vid.duration - 0.02);
+  if (vid.seeking) want = t; else vid.currentTime = t;
+  bar(t);
+}
+vid.addEventListener('seeked', () => { if (want !== null) { const t = want; want = null; vid.currentTime = t; } });
+const stepFrame = d => { vid.pause(); seek((want !== null ? want : vid.currentTime) + d / (cur.fps || 30)); };
+const jump = d => seek((want !== null ? want : vid.currentTime) + d);
+const toMark = () => { vid.pause(); seek(cur.frame_at + 0.3 / (cur.fps || 30)); };  // a little into that frame, so rounding can't show the one before
+function bar(t) {
+  if (vid.hidden || !vid.duration) return;
+  if (t === undefined) t = want !== null ? want : vid.currentTime;
+  const p = 100 * t / vid.duration + '%', T = $('track');
+  T.querySelector('.fill').style.width = p; T.querySelector('.knob').style.left = p; T.setAttribute('aria-valuenow', t.toFixed(1)); T.setAttribute('aria-valuetext', clock(t));
+  $('p-time').textContent = `${clock(t)} / ${clock(vid.duration)}`;
+  $('p-play').textContent = vid.paused ? '▶' : '❚❚';
+  $('p-mark').setAttribute('aria-pressed', vid.paused && Math.abs(t - cur.frame_at - 0.3 / (cur.fps || 30)) < 0.6 / (cur.fps || 30));
+}
+(function tick() { bar(); requestAnimationFrame(tick); })();
+const track = $('track'), tip = track.querySelector('.tip'), posOf = e => { const r = track.getBoundingClientRect(); return Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1) * (vid.duration || 0); };
+track.addEventListener('pointerdown', e => { if (!vid.duration) return; wasPlaying = !vid.paused; vid.pause(); track.setPointerCapture(e.pointerId); seek(posOf(e)); });
+track.addEventListener('pointermove', e => {
+  if (!vid.duration) return;
+  const t = posOf(e); tip.hidden = false; tip.style.left = 100 * t / vid.duration + '%'; tip.textContent = clock(t);
+  if (track.hasPointerCapture(e.pointerId)) seek(t);
+});
+track.addEventListener('pointerup', () => { if (wasPlaying) vid.play().catch(() => {}); });
+track.addEventListener('pointerleave', () => tip.hidden = true);
+/* A new frame: what the paused video shows, kept with its clip and video time so the source frame can be cut later. */
+let shown = null;
+(function watch() { if (vid.requestVideoFrameCallback) vid.requestVideoFrameCallback((_, m) => { shown = m.mediaTime; watch(); }); })();
+async function newFrame() {
+  if (vid.hidden || !vid.videoWidth) return;
+  vid.pause();
+  for (let k = 0; k < 40 && (vid.seeking || want !== null); k++) await new Promise(r => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 80));
+  const t = shown !== null && Math.abs(shown - vid.currentTime) < 0.5 ? shown : vid.currentTime;  // the time of the frame on screen, not of the play head
+  const here = order.map(id => frames.get(id)).find(f => f.clip === cur.clip && Math.abs(f.frame_at - t) < 0.5 / cur.fps);
+  if (here) { say('This moment is already a frame.'); return here === cur ? closeVideo() : (leaveWalk(), open(here.id)); }
+  if (!me) return profile();
+  const shot = (w, h, q) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(vid, 0, 0, w, h); return c.toDataURL('image/jpeg', q).split(',')[1]; };
+  $('p-new').disabled = true;
+  try {
+    const d = await post('/api/new', { uid: me.uid, session, from: cur.id, t, jpg: shot(cur.w, cur.h, 0.93), thumb: shot(240, Math.round(240 * cur.h / cur.w), 0.8) });
+    const seen = disk.get('newtip'); disk.set('newtip', '1');
+    leaveWalk(); reorder(d); open(d.id);
+    if (!live().length) setAdd(true);
+    say(seen ? 'New frame. Drag a box around each animal.' : 'New frame added. Drag a box around each animal, name it, and press Enter when the frame is right.');
+  } catch (e) { say('The frame was not added: ' + esc(e.message)); }
+  $('p-new').disabled = false;
+}
+async function dropFrame(id, removed) {
+  await flush();
+  let d; try { d = await post('/api/new/' + id, { uid: me && me.uid, session, removed }); } catch { return say('The server refused that.'); }
+  leaveWalk(); reorder(d);
+  if (removed) { progress(); say('Frame removed', 'Undo', () => dropFrame(id, false)); } else open(id);
+}
+$('p-new').onclick = newFrame; $('drop').onclick = () => dropFrame(cur.id, true);
+$('p-play').onclick = toggle; $('p-back').onclick = () => stepFrame(-1); $('p-fwd').onclick = () => stepFrame(1); $('p-mark').onclick = toMark; $('p-close').onclick = closeVideo;
+$('p-speed').onclick = () => { speed = (speed + 1) % SPEEDS.length; vid.playbackRate = SPEEDS[speed]; $('p-speed').textContent = SPEEDS[speed] + '×'; };
+$('b-add').onclick = () => setAdd(!adding);
+$('b-hide').onclick = () => setHide(!hidden);
+$('b-names').onclick = () => { allNames = !allNames; disk.set('names', allNames ? '1' : '0'); $('b-names').setAttribute('aria-pressed', allNames); draw(); retile(); };
+$('b-lit').onclick = () => { lit = !lit; disk.set('lit', lit ? '1' : '0'); $('b-lit').setAttribute('aria-pressed', lit); draw(); retile(); const P = picks(); if (P.length === 1 && !pop.hidden) closeUp(P[0].f, P[0].l); };
+$('b-vid').onclick = video; $('b-undo').onclick = doUndo;
+$('done').onclick = () => cur.done ? reopen() : finish();
+$('prev').onclick = () => step(-1); $('next').onclick = () => step(1);
+$('b-walk').onclick = () => startWalk();
+$('b-names').setAttribute('aria-pressed', allNames); $('b-lit').setAttribute('aria-pressed', lit);
+addEventListener('click', e => { const d = $('export'); if (d.open && !e.target.closest('#export')) d.open = false; });
+addEventListener('keydown', e => {
+  if (!cur || !$('start').hidden || (e.target.matches('input, select, textarea') && e.target.type !== 'checkbox' && e.target.type !== 'range')) return;
+  const mod = e.metaKey || e.ctrlKey, inBtn = e.target.closest('button, a, summary');
+  if ((mod && e.key !== 'z') || e.altKey) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key, fav = /^[1-9]$/.test(k) && me && me.favs[k - 1];
+  if (!vid.hidden && k !== 'Tab') {
+    const pv = { ' ': toggle, ArrowLeft: () => jump(e.shiftKey ? -5 : -1), ArrowRight: () => jump(e.shiftKey ? 5 : 1), ',': () => stepFrame(-1), '.': () => stepFrame(1), '<': () => stepFrame(-1), '>': () => stepFrame(1), '0': toMark, f: newFrame, Home: () => seek(0), End: () => seek(vid.duration) }[k];
+    if (pv) { e.preventDefault(); pv(); return; }
+  }
+  const tune = cutMode === 'tune' && cut !== null;
+  const all = { h: () => setHide(!hidden), n: () => $('b-names').click(), l: () => $('b-lit').click(), z: doUndo, t: () => mode === 'tiles' ? $('b-frames').click() : $('b-tiles').click(),
+    Delete: remove, Backspace: remove, r: () => setShowRemoved(!showRemoved), x: () => mode === 'frame' && xKey(),
+    ...(tune ? { d: () => setShowDropped(!showDropped), c: () => mode === 'cut' ? $('b-frames').click() : showCut(), j: () => nudge(e.shiftKey ? -5 : -1), k: () => nudge(e.shiftKey ? 5 : 1) } : {}) };
+  const on = mode === 'cut' ? { ...all, Escape: () => $('b-frames').click() }
+    : mode === 'tiles' ? { ...all, Escape: () => tileSel.size && clearTiles(), Enter: () => tileSel.size && right() }
+    : walk && vid.hidden ? { ...all, v: () => hasVideo && video(), b: () => setAdd(!adding), ArrowLeft: () => go(walk.k - 1), ArrowRight: () => go(walk.k + 1), Tab: () => go(walk.k + (e.shiftKey ? -1 : 1)), Enter: () => walk.end ? finish() : right(), Escape: () => adding ? (setAdd(false), walk.end && walkEnd()) : stopWalk() }
+    : { ...all, s: () => startWalk(), ' ': () => startWalk(), v: () => hasVideo && video(), b: () => setAdd(!adding), ArrowLeft: () => step(-1), ArrowRight: () => step(1), Tab: () => cycle(e.shiftKey ? -1 : 1),
+      Enter: () => { if (!cur.done) finish(); else step(1); }, Escape: () => { if (!vid.hidden) closeVideo(); else if (sel.size) deselect(); else if (adding) setAdd(false); else setArm(null); } };
+  const act = fav && vid.hidden && mode !== 'cut' ? () => picks().length ? name(fav) : mode === 'tiles' ? say('Select some tiles first.') : setArm(armed && key(armed) === key(fav) ? null : fav) : on[k];
+  if (!act || ((k === 'Enter' || k === ' ') && inBtn) || (k === 'Tab' && (mode !== 'frame' || e.target.closest('header, aside, #film, #player')))) return;
+  e.preventDefault(); act();
+});
+start().catch(e => { $('empty').hidden = false; $('empty').textContent = 'The labels did not load. Is the server still running? Reload the page to try again.'; console.error(e); });
+</script>
+</body>
+</html>

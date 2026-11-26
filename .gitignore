@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+
+# Bundles, reviews and exports never belong in the repository: they hold pictures and people's work
+mask-review-demo/
+*bundle*/
+edits/
+*.coco.json
+*_decisions.json
+*.cache.json
+
+# Local tools
+.DS_Store
+.claude/
+.vscode/
+.idea/
