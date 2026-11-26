@@ -21,7 +21,7 @@ reads any COCO file, with or without scores, and pictures without any labels.
 
 ## Install
 
-Python 3.9 or newer.
+Python 3.10 or newer.
 
 ```bash
 git clone https://github.com/Spiffical/mask-review
